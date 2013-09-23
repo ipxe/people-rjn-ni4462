@@ -1,0 +1,18 @@
+.TH "PB_NI4462_CALIBRATE" "1" "" "" "User Commands"
+.SH "NAME"
+\fBpb_ni4462_calibrate\fR
+.SH "SYNOPSIS"
+Load the PulseBlaster with a simple program to aid calibration of the NI 4462's clock, and the external delay-line
+.SH "DESCRIPTION"
+.LP
+\fBpb_ni4462_calibrate mode\fR
+.IP
+The PulseBlaster is connected so that one of its outputs is wired up to the NI 4462's trigger input and another to the Analog input.
+This allows for adjustment of the delay-line length, and for adjustment of the NI 4462 clock (wrt the PulseBlaster)
+.LP
+\fBpb_ni4462_calibrate \-h\fR
+.IP
+Print detailed help.
+
+.SH "SEE ALSO"
+\fBni4462_calibrate\fR(1), \fBni4462_pb_trigger\fR(1), \fBfilterctl\fR(1), \fBarduino_delay\fR(1)

@@ -1,0 +1,19 @@
+# ni4462_test(1) completion
+#
+have ni4462_test &&
+_ni4462_test()
+{
+        local cur
+
+        COMPREPLY=()
+        cur=${COMP_WORDS[COMP_CWORD]}
+
+        if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $( compgen -W '-b -c -d -e -f -h -i -j -l -m -n -o -p -s -t -v -x -B -D -I -Q -R -S' -- $cur ) )
+        else
+                _filedir '@(dat)'
+        fi
+} &&
+
+complete -F _ni4462_test ni4462_test
+

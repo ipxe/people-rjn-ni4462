@@ -1,0 +1,20 @@
+.TH "NI4462_CALIBRATE" "1" "" "" "User Commands"
+.SH "NAME"
+\fBni4462_calibrate\fR
+.SH "SYNOPSIS"
+Calibrate the NI 4462 internal clock against the PulseBlaster.
+.SH "DESCRIPTION"
+.LP
+\fBni4462_calibrate [OPTS] [FILE.dat]\fR
+.IP
+This allows for measurement of the clock-skew and delay-line length, and for verification whether we have corrected for it.
+.LP
+\fBni4462_calibrate \-h\fR
+.IP
+Print detailed help.
+
+.SH "DOCUMENTATION"
+ni4462_calibrate may be invoked with \fB\-h\fR (or \fB\-\-help\fR) to print detailed help. Refer also to the README.txt in the source.
+
+.SH "SEE ALSO"
+\fBpb_ni4462_calibrate\fR(1), \fBircam_calibrate_clocks\fR(1), \fBfilterctl\fR(1),  \fBarduino_delay\fR(1), \fBdataplot\fR(1)
