@@ -1,0 +1,118 @@
+<!DOCTYPE HTML><html><head><meta charset="utf-8"><link rel="stylesheet" type="text/css" href="../style.css"><title>National Instruments NI4462 - experimental notes and utilities</title></head><body class=program> 
+<!-- IMPORTANT: this webpage is probably generated from a Makefile. Don't edit this; edit the source. -->
+
+<h1>Experimental Notes on the National Instruments NI 4462, and data-capture under Linux, using C.</h1>
+
+<h2>Introduction</h2>
+
+<p>The National Instruments <a href="http://sine.ni.com/nips/cds/view/p/lang/en/nid/202237">NI PCI-4462</a> is a 4-channel differential-input 24-bit data-capture PCI card. 
+The signal:noise ratio is genuinely impressive: (118 dB dynamic range, and 6 gain settings for input ranges from ±316 mV to 42.4 V). It can sample at up to 204.8k samples/second on all 4 channels in parallel, and may beexternally triggered.
+Although it is normally used in LabView under Windows, there is a a C-library, DAQmx. The underlying ADC is a pair of <a href="http://www.akm.com/akm/en/file/datasheet/AK5394AVS.pdf">AK5394A</a> delta-sigma ICs.</p>
+
+<p>The NI4462 can <u><b>not</b></u> do jitterless triggering, fast turarnound between tasks, sampling-at-will (one sample per falling-edge clock input), or disable the internal hardware/software low-pass filter. We didn't know that when we purchased it!</p>
+
+<p>We solved the installation problem, wrote some programs for it, and learned about, documented, and (sometimes) worked-around its quirks. It's all released below; software is GPLv3+ (with the necessary exemption for libdaqmx).</p>
+
+
+<h2>Modifications</h2>
+
+<p><b>Kernel:</b> NI provide a binary-blob Linux kernel driver which only supports old 32-bit kernels. We hacked it to run under kernel 2.6.29 (supplied with Mandriva 2009.1, the only kernel/distro that could simultaneously support both the NI4462 
+<i>and</i> the motherboard's ethernet chip). Here's <a href="https://decibel.ni.com/content/thread/8383">what we did</a>. A particular "highlight" is that the NI Kernel Abstraction Layer (nikal.c) relies on <tt>init_mm</tt>, a symbol which was unexported after
+2.6.28; a workaround is to patch nikal.c, with the following:</p>
+<div style="margin-left: 5em"><small><code>struct mm_struct *init_mm_hack = ( struct mm_struct * ) 0xc04e41a0; // grep init_mm /proc/kallsyms<br>
+#define init_mm (*init_mm_hack)  //Never compile this on a different kernel</code></small></div>
+
+<p><b>100MHz Clock export:</b> There is no "officially supported" way to export the constant free-running master 100MHz clock (nor the 10/20 MHz clocks) from the NI4462. However, with a soldering iron and a FIN1001/FIN1002 pair, this is possible.
+For details, see this <a href="http://forums.ni.com/t5/Multifunction-DAQ/How-to-get-a-regular-clock-10-MHz-20-MHz-or-100-MHz-from-the-NI/td-p/1969719">post</a> and this <a href="http://forums.ni.com/ni/attachments/ni/250/70717/1/ni4462_clock.jpg">photo</a>.</p>
+
+<p><b>Sample clock export:</b> It's much easier to export the sample-clock, or the trigger, using the RTSI interface; details are in my experimental notes below.</p>
+
+			
+<h2>Programs</h2>
+
+<p>These are the main  programs written to use the NI4462. There are also soeme utilities and experiments described in the README.txt:</p><ul>
+<li><b>ni4462_test</b> &nbsp; - for experimentation, characterisation and data capture. It configures the NI 4462 in various modes, setting up the voltage-range, input-channel(s), sample-frequency, sample-count, input-coupling, 
+terminal-mode and triggering, and is then used for data-capture. <i>This file is also commented in great detail, serving as example documentation and exploration of the NI DAQmx C-library.</i>
+<li><b>ni4462_capture</b> &nbsp; - used for our IR camera; less customisable than ni4462_test. Outputs statistical summary data, rather than raw reads.
+<li><b>ni4462_check</b> &nbsp; - a simple shell-script to check for the presence of the NI 4462 device (by lspci). (see also <tt>nilsdev</tt>.)
+<li><b>ni4462_voltmeter</b> &nbsp; - a simple wrapper for ni4462_test to act like a voltmeter.
+<li><b>ni4462_speak_noise</b> &nbsp; - a simple wrapper for ni4462_test, that causes the noise std-dev to be spoken once per second. Useful as a hands-free "multimeter"
+<li><b>ni4462_characterise</b> &nbsp; - measure the exact value of the trigger delay, and characterise the ADC input pulse-response (also uses the PulseBlaster hardware).
+</ul>
+
+<h2>Experiments</h2>
+
+Here are my <a href="NOTES.txt">Lab Notes</a>. These can be used to form the missing counterpart to the manual. All the data and plots is included in the tarball below. Some highlights include:</p><ul>
+<li>List of "Gotchas" - traps for the unwary, when using this device.
+<li>Tips - further explanations (by experiment)
+<li>Experiment on triggering and synchronising the device. The PFI trigger input is in fact a "gate", not a "trigger", and has a 5us <a href="http://forums.ni.com/t5/Multifunction-DAQ/Undocumented-what-is-the-jitter-for-digital-triggering-NI-4462/td-p/1935015">jitter</a>.
+<li>How to export the master 100MHz clock. How to export other signals via RTSI (and which RTSI signals are available on <i>this</i> device.
+<li>Some noise measurements.
+<li>Identification of bugs: eg looping over taskCommit() will eventually crash.
+<li>Tests and measurements of the precise filter delay.
+<li>Blocking vs non-blocking reads. There are at least 16 permutations to configure DAQmxReadAnalogF64(), not all of which work.
+<li>Measurement of the performance of the Task*() functions. For example, taskStart...taskStop takes an entire 1ms. Rather sub-optimal if we expect to re-trigger (and re-sync) every 100 samples.
+<li>Pre-amp saturation measurements.
+<li>Many different measurements of the digital/timing performance (raw data and plot files included).
+<li>Many different measurements of the analog performance (raw data and plot files included).
+<li>General thoughts on the ADC.
+</ul>
+
+			
+<h2>Bugs</h2>
+
+An ideal 200kHz ADC should take one instantaneous measurement (per channel) every falling-edge of the clock-input. It should accept any arbitrary and irregular pattern of trigger pulses, subject only to the constraint that the trigger pulses
+be at least 5us apart. The measurement should be an average of the signal over the previous ~1us (so that for example, a sharp spike that ended 10us ago does not affect this sample. Any low-pass filtering should be configurable. For our application,
+the NI4462 has 3 major problems:<ul>
+<li>It's impossible to have a small group of samples (say 100) in a given task, associated with a single trigger pulse, and then be ready for the next group immediately. The inter-task spacing is at least 200 samples wide. This means we have to
+give up on synchronisation during the experiment, and just take 2M samples in a single task and with a single trigger. The timing source and ADC cannot be stay synchronised (within 0.1 sample) for that long, except by the clock-export modification above.
+<li>The offset between the falling edge of PFI0 and the sample-clock has a jitter of up to 5us. Rather than start the sample-clock on receipt of the trigger pulse, the NI4462 actually free-runs the sample clock at 200kHz, constantly discarding the
+data; then after a trigger, it just keeps the next N samples.
+<li>The NI4462 forces the Nyquist rule of low-pass filtering (both in the analog front-end and the digital side). That would be fine if we cared about the frequency spectrum of a constant stream of data. But it makes the device useless for multiplexed
+inputs (one sample per pixel, moving the the next pixel between samples), and it also assumes (mathematically speaking) that we know nothing about the phase of the sample clock wrt the signal. In our case, we are trying to read the amplitude of a sawtooth
+wave and we know <i>exactly</i> what the phase relationship is, but the Sigma-Delta ADC cannot take advantage of this, so the information is discarded.
+</ul>
+<p>In summary, we really need the NI4462 to be built on a 24-bit version of the <a href="http://www.analog.com/en/analog-to-digital-converters/ad-converters/ad7677/products/product.html">AD7677</a>!</p>
+		
+
+<h2>Installation</h2>
+
+<ul>
+<li>Prerequisites: to install NI's kernel driver, see <a href="https://decibel.ni.com/content/thread/8383">this howto</a>. Also, install NI's <tt>libnidaqmx</tt>. This will only work on a 32-bit system.
+<li>[Alternatively, build with the daqmx_dummy.c file ("make dummy") - this supports a limited subset of fake DAQmx() calls to allow ni4462_test to build, even on 64-bit without having libnidaqmx installed.]
+<li>For <tt>ni4462_characterise</tt>, the PulseBlaster, Arduino, and maths parts of the PhD software release are also required, as is the corresponding hardware.
+<li>To install this software, simply: <tt>make &amp;&amp; sudo make install</tt>. Then run, for example, <tt>ni4462_test</tt>.
+<li>This is Free Software released under the GNU GPL v3+ (except for the exemption to allow linking with the proprietary libdaqmx).  Please feel free to take it, modify it, package it etc.
+<li>Author: <a href="http://richardneill.org">Richard Neill</a>. Do ask if you would like further information and assistance.
+</ul>
+
+
+<h2>Notes</h2>
+
+<p>This was originally written as part of my <a href="http://www.richardneill.org/phd">PhD Infrared Camera system</a>. It should be applicable for wider usage.<br>
+Other programs in the same release may also be useful, especially the pulseblaster, arduino, and mathematics sections.</p>
+
+
+<h2>Download</h2>
+
+<p><a href="ni4462.tgz">ni4462.tgz</a><br>
+<a href="http://git.ipxe.org/people/rjn/ni4462.git">GIT repository</a></p>
+
+
+<h2>Documents</h2>
+
+<p>Some selected files, from the tarball:<br>
+ <!-- NB links are correct wrt the www/ directory after 'make www', not necessarily in the source. -->
+<a href="README.txt">README.txt</a><br>
+<a href="NOTES.txt">NOTES.txt</a><br>
+<a href="ni4462_test.1.html">ni4462_test.1</a><br>
+<a href="ni4462_characterise.1.html">ni4462_characterise.1</a><br>
+<a href="ni4462_voltmeter.1.html">ni4462_voltmeter.1</a><br>
+<a href="ni4462_speak_noise.1.html">ni4462_speak_noise.1</a><br>
+</p>
+
+
+<h2>Navigation</h2> 
+<p>Return to <a href="../">all programs</a>, <a href="/">site home</a>.</p>
+
+</body></html>

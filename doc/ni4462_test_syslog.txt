@@ -1,0 +1,256 @@
+Apr  2 18:34:18 waffle ni4462_test: Starting program 'ni4462_test... 
+Apr  2 18:34:19 waffle ni4462_test: Writing everthing to syslog, as the identifier 'ni4462_test' 
+Apr  2 18:34:20 waffle ni4462_test: ADC filter delay: zero samples being discarded: *beware* of pre-capturing! 
+Apr  2 18:34:21 waffle ni4462_test: DAQmxCreateTask: creating new task... 
+Apr  2 18:34:22 waffle ni4462_test: DAQmxCreateAIVoltageChan: setting input_channel to Dev1/ai0, terminal_mode to DAQmx_Val_Diff, and voltage range to [-10.000000, 10.000000] ... 
+Apr  2 18:34:23 waffle ni4462_test: Input Voltage range requested: [-10.000000, 10.000000] V; actually coerced by device to: [-10.000000, 10.000000] V. Gain is: 0.000000 dB. 
+Apr  2 18:34:24 waffle ni4462_test: Input terminal_mode: readback 10106 
+Apr  2 18:34:25 waffle ni4462_test: DAQmxSetAICoupling: setting input_coupling to 10050, DAQmx_Val_DC ... 
+Apr  2 18:34:26 waffle ni4462_test: Input coupling: readback 10050 
+Apr  2 18:34:27 waffle ni4462_test: No external trigger has been set up. Sampling will begin immediately at DAQmxStartTask()... 
+Apr  2 18:34:28 waffle ni4462_test: DAQmxCfgSampClkTiming: acquiring (finite) 10000 samples, at 200000.000000 Hz, using the rising edge of the internal sample-clock... 
+Apr  2 18:34:29 waffle ni4462_test: Sample clock requested: 200000.000000 Hz; actually coerced by device to: 200000.000041 Hz. 
+Apr  2 18:34:30 waffle ni4462_test: DAQmxSetReadReadAllAvailSamp: setting to true, to enable DAQmxReadAnalogF64() with DAQmx_Val_Auto to be non-blocking even when num_samples is finite... 
+Apr  2 18:34:31 waffle ni4462_test: DAQmxGetBufInputOnbrdBufSize: getting size of the onboard buffer... 
+Apr  2 18:34:32 waffle ni4462_test: DAQmxGetBufInputBufSize: getting size of the input buffer... 
+Apr  2 18:34:33 waffle ni4462_test: The onboard buffer size is 2047 samples per channel. The input buffer is 10000 samples per channel. 
+Apr  2 18:34:34 waffle ni4462_test: DAQmxSetAIEnhancedAliasRejectionEnable: setting to #defined value of on. 
+Apr  2 18:34:35 waffle ni4462_test: EnhancedAliasRejectionEnable: readback 1. 
+Apr  2 18:34:36 waffle ni4462_test: DAQmxTaskControl: committing task (3) 
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c23c => 00000007
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c23c => 00000007
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c16c => 00000000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f806c180 <= 0000ffff
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c16c => 00000001
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c16c => 00000000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c23c => 00000007
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f806c24c <= 000029e5
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (f) f806c24c => 00000000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0038
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 1b00
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003c
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 032b
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 004d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= c020
+Apr  2 18:34:38 waffle ni4462_test: Setup time (for CreateTask...CommitTask) was: 16.8 s. 
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= c000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003c
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 032b
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0057
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 8000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0057
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 8000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000c
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 182d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003f
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0060
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000c
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 182d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= c000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0012
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0013
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 270f
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0008
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0020
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003e
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 4fa3
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0057
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 8000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 003e
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 4fa3
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= c000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 000c
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 182d
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0053
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 0001
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c000 <= 0057
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (b) f806c002 <= 8000
+Apr  2 18:34:38 waffle klogd: IRQ 17/nipalk: IRQF_DISABLED is not guaranteed on shared IRQs
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f8046500 <= 80000010
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f8046518 <= 00000000
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f8046504 <= 165548fc
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f804650c <= 00e00700
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f8046514 <= 00e50741
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f804651c <= 00e00700
+Apr  2 18:34:38 waffle klogd: [nikal] MEM (c) f8046520 <= 35a3d7f8
+Apr  2 18:34:39 waffle ni4462_test: DAQmxStartTask: Starting task... 
+Apr  2 18:34:40 waffle ni4462_test: DAQmxReadAnalogF64: Non-blocking read of as many samples as available, immediate timeout... 
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046500 <= 80000010
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046518 <= 00000000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046504 <= 1a5548fc
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f804650c <= 00e00700
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046514 <= 00e50741
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f804651c <= 00e00700
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046520 <= 35a3d7f8
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00000000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f8046542 => 0000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00000000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046500 <= 80000010
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046530 <= b2cf7b3c
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046518 <= 00000000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046504 <= 1a5548fc
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f804650c <= 80e00700
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046514 <= 00e50741
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f804651c <= 00e00700
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046520 <= 35a3d7f8
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f8046502 <= 0001
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046510 => 00000000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046510 => b34f8f00
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f8046504 <= 9a5548fc
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f806c134 <= 00030023
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (c) f806c134 <= 00030123
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0049
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0020
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0049
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0021
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0008
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0040
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0008
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c008 <= 0001
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f806c004 => b0f0
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c004 <= 0100
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f806c004 => 30b0
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f804653c => 8a080000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f8046504 <= 4000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f804653c => 0a080000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f8046504 <= 0400
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f806c004 => 30b0
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f8046542 => 0000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f804653c => 0a08
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f804653c => 0a080000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f8046502 <= 0008
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f8046542 => 0000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (e) f8046542 => 0000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (f) f8046518 => 00009c40
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0008
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 2000
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f8046502 <= 0080
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c000 <= 0053
+Apr  2 18:34:40 waffle klogd: [nikal] MEM (b) f806c002 <= 0001
+Apr  2 18:34:41 waffle ni4462_test:     ...acquired 10000 points this time; total is: 10000. 
+Apr  2 18:34:42 waffle ni4462_test: Data value 0 is: -0.000182 
+Apr  2 18:34:43 waffle ni4462_test: Data value 1 is: -0.000230 
+Apr  2 18:34:44 waffle ni4462_test: Data value 2 is: -0.000131 
+Apr  2 18:34:45 waffle ni4462_test: Data value 3 is: -0.000176 
+Apr  2 18:34:46 waffle ni4462_test: Data value 4 is: -0.000170 
+Apr  2 18:34:47 waffle ni4462_test: Data value 5 is: -0.000167 
+Apr  2 18:34:48 waffle ni4462_test: Data value 6 is: -0.000174 
+Apr  2 18:34:49 waffle ni4462_test: Data value 7 is: -0.000120 
+Apr  2 18:34:50 waffle ni4462_test: Data value 8 is: -0.000129 
+Apr  2 18:34:51 waffle ni4462_test: Data value 9 is: -0.000182 
+Apr  2 18:34:52 waffle ni4462_test: Finished acquiring all 10000 samples...breaking out of loop. 
+Apr  2 18:34:53 waffle ni4462_test: DAQmxGetReadOverloadedChansExist: checking whether an overload occurred... 
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c198 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c198 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c194 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c194 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c14c => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c14c => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c148 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (f) f806c148 => 00000000
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (c) f806c134 <= 00030023
+Apr  2 18:34:54 waffle klogd: [nikal] MEM (c) f806c134 <= 00030123
+Apr  2 18:34:54 waffle ni4462_test:     ...OK, no overload has happened. 
+Apr  2 18:34:55 waffle ni4462_test: DAQmxStopTask, DAQmxClearTask: stopping and clearing task... 
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0008
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 2000
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0053
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0001
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0049
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0001
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0049
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0000
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (c) f806c12c <= 00008048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (c) f806c12c <= 00008048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0010
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 0048
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0100
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c000 <= 003d
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (b) f806c002 <= 0011
+Apr  2 18:34:56 waffle klogd: [nikal] MEM (c) f806c114 <= 00000022
+Apr  2 18:34:56 waffle ni4462_test: Cleaning up after libnidaqmx: removing lockfiles from NI tempdir, /tmp/natinst/ . 

@@ -1,0 +1,1047 @@
+INTRO
+-----
+
+Here are some experimental notes on the performance and usage of the National Instruments NI 4462. It's mostly very good, but does have some quirks.
+The program ni4462_test.c is a useful source of data, and platform for experimenting with parameters. It has detailed comments on how to use the main
+DAQmx functions, and their performance.
+
+The NI 4462 is categorised as a "DSA" (Dynamic Signal Acquisition) device (not an E-, M-, AO-, S-  series) by NI.
+
+The internal ADC is the AK5394A: a 2 channel 24-bit 192 kHz Delta-Sigma ADC, 2 of these are in parallel. ($14 each)
+The datasheet is available here: http://www.akm.com/akm/en/file/datasheet/AK5394AVS.pdf  The AK5394A has 123dB dynamic range, 128x
+oversampling at up to 216kHz. It quotes a S/(N+D) of 110 dB, gtting worse at higher sample freq (94dB @ 192 kHz).
+Note that the chips are NOT "triggered" per se: they free-run. This means that there is up to 1-sample of jitter in response to the "triggering".
+
+The ADC uses "Delta Sigma with Noise Shaping": http://en.wikipedia.org/wiki/Delta-sigma_modulation
+See also the DSA manual section 2-8 "ADC": oversampling with noise-shaping: rejects noise completely.
+NI 4462 specs: at 204.8 kHz, the sample clock oversamples at 128fs; the ADC modulator oversamples at 32 fs.
+
+
+DAQmx
+-----
+
+NI's C-library for the 4462 is DAQmx. Not bad, and reasonably well documented (except for the edge cases we really want to know about!).
+It has a few bugs (see below), and hasn't had a new release since 8.0 in 2005. (the 8.02 release in 2011 makes changes to the kernel driver,
+but not to the C-library, which uses the identical files in the RPM). We're using 8.0.  It looks like NI are migrating to "DAQmx Base" on
+Linux, but that doesn't support the 4462. Documentation is installed at: /usr/local/natinst/nidaqmx/docs  (and is not available online).
+
+
+GOTCHAS
+-------
+
+* Triggering isn't. One might expect the Digital Edge Trigger to actually be an edge trigger; in fact, it acts as a Gate.
+  See section "Triggering and Synchronising" below.
+
+* Beware of reading in int32adc mode, i.e.  DAQmxReadBinaryI32(). This has (surprisingly) poorer S/N than DAQmxReadAnalogF64().
+  For more, see "Noise Measurements at Different Ranges" below.
+
+* If using AC coupling, remember that it is necessary to wait ~ 0.7 seconds at the start to allow the internal RC coupling circuit
+  to settle to 24-bit accuracy. The input relays only swap over at the moment of taskStart (or taskCommit), so it's useful to
+  calling taskCommit before taskStart.  This happens every single time, even if it was ac-coupled previously! (It seems that creating a
+  new task resets the coupling to the default DC. See ni4462_test.c for more; this delay is added automatically.
+
+* The gain of the analog-input is only changed on taskCommit. This means that if the pre-amp WAS saturated, and we just changed the gain,
+  the first second or so of data will be corrupted.  See: "PRE-AMP SATURATION" below.
+
+* The device takes ~ 0.8 seconds to be ready when first configured; up to 1.6 seconds if it was just reset. It will not respond to triggers
+  before this point.
+
+* Don't use taskCommit combined with looped { taskStart, ReadAnalogF64, taskStop } and Low Sample-Frequency. It crashes.
+  See "Beware Of Looped Task Commit" below.
+
+* Filter Delay. There is an N sample delay in the ADC, which causes the trigger to appear "early". This is usually 63 samples,
+  (but can be lower at low sample rates, iff "Enhanced Low Frequency Antialiasing" is enabled). This is documented in the manual,
+  "NI Dynamic Signal Acquisition User Manual" section 2-23, or see ni4462_test.c for an example. See "FILTER DELAY" below.
+
+* There is NO missed-trigger detection. (Workaround: look at the timestamps of each trigger, and check.)
+  http://forums.ni.com/t5/Multifunction-DAQ/How-can-I-detect-a-missed-trigger-i-e-2nd-trigger-arrives-before/td-p/1926963
+
+* There is no way to do sampling "at will". The device "should" support making one sample on every falling-edge of PFI0
+  (subject only to a minimum time between edges). Unfortunately, it doesn't.
+
+* Fast Retriggering is impossible! There is no hardware support for DAQmxSetStartTrigRetriggerable(), and so we must resort to looping over
+  {StartTask...StopTask}. But this is far too slow...at least 1.5 ms latency. See "LOOP PERFORMANCE" below.
+  (The ability to do this, for small sample groups is now irrelevant anyway in the context of the hideous jitter.)
+
+* So, the operating mode is really one task (with just one trigger) per experiment; triggering like an oscilloscope is impossible.
+  
+* Moving the device between PCI slots can mess up enumeration: it can become Dev2 rather than Dev1 (even when there is only one NI4462 card present)
+
+
+TIPS
+----
+
+* Self calibration. The device doesn't self-cal on power-on, but it is generally a good idea. (Use "ni4462_test -S" to do it)
+  Self-calibration should be done after 15 minute warmup, and before each measurement session. Frequent self-cal is not harmful (cf limited eeprom lifespan).
+  See: http://www.mgmassman.com/primary/Engineering/LabTools/NationalInstruments/PXI/M%20Series%20Doc%20CD/MReadme.html
+
+* Performance. Most of the DAQmx functions are relatively fast ( ~ 0.2 ms),  except:
+	- DAQmxCreateAIVoltageChan  (750 ms)
+	- DAQmxTaskControl ( DAQmx_Val_Task_Commit)  400ms;  /* Don't use this anyway, see below */
+	- TaskStart is slow, IFF it has to do the implict commit.
+	- Also, don't forget the settling time for AC-coupling, if needed.
+
+* Overloads can occur both pre- and post-digitisation. These can be detected (see ni4462_test.c).
+
+* The behaviour of DAQmxReadAnalogF64() wrt blocking and non-blocking reads is confusing. See "Blocking and Non-blocking reads" below.
+
+* Min samples per task is 2 (though we can read back the data points one at a time, if desired).
+
+* Clock accuracy is only ~ 40ppm long-term. But, calibration is very fine. Eg:
+  Clock requested: 200000.000010 Hz, coerced to: 200000.000041 Hz; requested 200000.000100 Hz,coerced to: 200000.000223 Hz.
+  i.e. we can adjust it to within 1 part per billion!
+
+* Jitter on Falling edge of PFI0. NI say that acquisition begins "immediately" on receiving a digital trigger (albeit for data that is delayed in
+  the ADC). This isn't actually possible: one might hope for 1 clock cycle of the oversampling clock (128 * fs), so at 200 kHz, jitter will be < 39 ns.
+  BUT actually, it's 5us! The ADC doesn't *trigger* when PFI0 falls; it gates. The ADCs are already free-running; PFI0 just makes it start recording
+  samples from the next data point. http://forums.ni.com/t5/Multifunction-DAQ/Undocumented-what-is-the-jitter-for-digital-triggering-NI-4462/td-p/1935015
+  It acts rather like a digital audio recorder that is constantly buffering samples: when 'record' is presed, it starts saving (and can, in
+  reference-trigger mode, also save some previous samples).
+  
+* In order to synchronise the device with other equipment, a soldering iron is required! See below.
+
+
+UNSUPPORTED FUNCTIONS
+---------------------
+
+The following DAQmx functions would be really useful, but are unsupported by the NI 4462. (Error -200452, not supported by device, confirmed by NI support):
+
+* Configuring a trigger-delay. This would be really useful as a workaround to the 63-sample delay:
+	DAQmxSetStartTrigDelayUnits(taskHandle, DAQmx_Val_Seconds);  DAQmxSetStartTrigDelay(taskHandle, 0.1);
+  Workaround: delay the trigger pulse before it reaches PFI0, i.e. in the PulseBlaster (or with a separate delay-line circuit).
+
+* Making the task automatically retriggerable:
+	DAQmxSetStartTrigRetriggerable( taskHandle, TRUE), or DAQmxSetTrigAttribute (taskHandle, DAQmx_StartTrig_Retriggerable, TRUE)
+  Workaround: loop around start-task/stop-task. Do blocking reads.
+
+* Auto-zeroing:  DAQmxSetAIAutoZeroMode(taskHandle, channels[], TRUE);
+  Workaround: use self-calibration (and correlated-double-sampling measurements).
+
+* Missed Trigger detection: There is no way to detect if a trigger pulse arrives during the task:
+  http://forums.ni.com/t5/Multifunction-DAQ/How-can-I-detect-a-missed-trigger-i-e-2nd-trigger-arrives-before/td-p/1926963
+
+* Single-Point, Hardware triggering:  DAQmxCfgSampClkTiming( ... DAQmx_Val_HWTimedSinglePoint ...)
+  Workaround: none; this is extremely restricting. Must use dead-reckoning to keep in sync. (and export the master clock)
+
+
+
+SELECTED ERROR MESSAGES
+-----------------------
+
+-200279	: Buffer overflow before read: the device has put the sample in circular buffer, but overwritten the data before it was read.
+-200278 : Buffer underflow: we are reading a sample that we do not have, because the task has stopped.
+
+-50103  : Race condition. "The specified resource is reserved". Two programs are fighting over the NI4462 hardware; the 2nd is (correctly) locked out.
+	  To forcibly release a lock, call DAQmxResetDevice(), which will break the other program's lock, making it exit with error -88710.
+
+-89137 : Connection between terminal and signal cannot be established, because one is already in use. Reset device to fix.
+
+-88705 : The specified device is not present or is not active in the system. (Usually means the enumeration has gone wrong, see nilsdev)
+
+
+TRIGGERING AND SYNCHRONISING
+----------------------------
+
+One might rather hope for some correlation between the moment that a Digital Edge trigger arrives at PFI0 and the phase of the sample clock. Sadly,
+there is none. The ADCs don't act like a digital oscilloscope; rather like a digital-audio device. Sampling runs constaintly (the ADCs internally oversample x128),
+and the PFI0 input (Digital Edge Trigger or Reference Trigger) simply gates the next N samples into the data-stream, rather than discarding them. Ugh.
+As a result, there is a whole 5 us "jitter" on the PFI0 "clock" input. This is nearly useless for this application. However, it is possible to get
+two NI 4462 devices to sample in sync (via the RTSI cable), so there is some hope...
+
+Experiments:
+
+1. How well are the 4 channels synchronised?
+     - Power up my dewar-interface (so that the SP 720 protection diodes don't clamp the NI inputs)
+     - Feed in a 50 kHz 0-5V triangle-wave into all 4 channels in parallel (ground the -ve inputs).
+     - Sample at 200 kHz on all channels (DC coupled).
+     - Look at result:  doc/sync/
+
+   => All 4 channels are very close to one another in amplitude, and phase. In this respect, the NI 4462 performs almost perfectly.
+      (Note that the apparent non-triangularity is due to sampling being out of phase with the wave, not due to errors in the waveform).
+
+
+2. How much jitter is there in responding to DigitalEdgeTrigger?
+     - Feed in a 50 kHz 0-5V triangle-wave into all channel 0.
+     - Feed in a synchronised square wave into PFI0.  (555 Schmitt-trigger: pins 2,6 to triangle, pin 3 to PFI0).
+     - Sample at 200 kHz:  ni4462_test -f 200000 -n 20 -i dc -m diff -v 10 -t fe -j 0 -p 0 -l off -c 0 -x - | dataplot -c 0 /dev/stdin
+     - Repeat several times. Expect each iteration to be the same!
+     - Look at result: doc/jitter/
+
+   => There is NO correlation between the phase of the trigger (PFI0) and the phase of the sample-clock. I.e. there is 5 us of Jitter!!
+      This is very, very bad, in my application: I actually care about the precise timings.  (It does make sense of some other observations though,
+      notably why there is no documentation of the trigger delay, and how it's possible to have "reference triggers".)
+
+   * Reference-clocked sampling wasn't measured, but would  show the same 5us jitter.
+   * At really low frequencies (eg 100 Hz), the ADCs don't run that slowly, and so the NI 4462 does decimation. Therefore, I would expect
+     (but haven't measured) that the isn't quite as bad as a whole sample period.
+
+    According to: http://zone.ni.com/devzone/cda/tut/p/id/11369 the 4462 is an "Oversample Clock timed device", not "Sample clock timed device"
+    i.e. it's free-running rather than synchronisable.
+
+
+Workaround: share the same clock, and delay the trigger: see below.
+
+Note: if Falling-edge triggered, and PFI0 is *already* low, then the SampleClock output on RTSI6 (which normally starts as soon as we StartTask when
+there is a reference-trigger) does NOT start. (And vice-versa for rising-edge trigger).
+
+Note: The device can take up to 1.6 seconds (worst case) to be configured and ready to start the first task. (Obviously), trigger pulses that arrive
+before then will be ignored. See ni4462_test.c
+
+
+RTSI OUTPUT and CLOCK OUTPUT
+----------------------------
+
+RTSI "Real time system integration bus": there is an RTSI cable connection on top of the NI 4462 card, which can make several devices sync up exactly.
+It does this by synchronising the master clock ( ~ 20 MHz) and a sync-pulse which resets the ADCs and the frequency dividers. This should enable us
+to somehow sync the NI 4462 either as a master or slave to the rest of the system. Currently not well understood, but see:
+
+/usr/local/natinst/nidaqmx/docs/daqmxcfunc.chm/daqmxexportsignal.html
+/usr/local/natinst/nidaqmx/docs/mxcprop.chm/attributeclassexportsignal.html
+/usr/local/natinst/nidaqmx/docs/mxcncpts.chm/clocks.html
+/usr/local/natinst/nidaqmx/docs/mxdevconsid.chm/sigsynchrondsa.html
+/usr/local/natinst/nidaqmx/examples/ansi_c/Synchronization/Multi-Device/FiniteAI/FiniteAI.c
+/usr/local/natinst/nidaqmx/examples/ansi_c/AnalogIn/MeasureSoundPressure/ContAcqSndPressSamps-IntClk/ContAcqSndPressSamps-IntClk.c
+http://digital.ni.com/public.nsf/allkb/392DEFA8A72CA693862572E300651A9F
+
+(note that only certain of the clock signals can be exported, on only some of the RTSI pins. Also, DAQmx automates this for multiple devices,
+but that's unhelpful if our "slave" device isn't actually an NI PCI card!).
+
+To use DAQmxConnectTerms(), and connect signals to RTSI outputs, call it *before* task commit. Note that the connections persist across instances of
+the program, and are only cleared by a device reset. Only certain permutations of signals and terminal names actually work: see ni4462_test.c
+The full list of available terminal names is at ftp://ftp.ni.com/support/daq/pc/ni-daqmxbase/1.4/Readme.html
+
+RTSI pins are:
+
+* RTSI 0-6: available on a header, and the signal routing can be configured by user via DAQmxConnectTerms(). Options include:
+          * SampleClock: edges on each sample; normally outputs exactly N pulses, but, in reference-trigger mode, this free-runs before start.
+			=> ref-trigger mode is essential to sync the PulseBlaster trigering.
+	  * StartTrigger: a single 25ns pulse on start.
+
+* RTSI7 / RTSI_OSC: this isn't supported on this device. (This is contrary to pinout diagrams which wrongly show it on connector pin 34).
+
+* RTSI 8: SampleClockTimebase or DividedSampleClockTimebase:  25.6 or 12.8 MHz (varies with chosen sample-freq). Constantly running. (Connector pin 16)
+
+* RTSI 9:  SyncPulse. I couldn't actually see this anywhere even with a fast 'scope, but it apparently exists.
+
+So, we use RTSI6 with SampleClock in pretrigger mode, to gate the PulseBlaster's start.
+Note: RTSI6 ONLY begins clocking at TaskStart (not TaskCommit). Also, it will not start if PFI0 is already in the "active" logic state.
+
+
+100 MHz clock out:
+
+There is NO "officially supported" way to export the constant free-running master 100MHz clock (nor the 10/20 MHz clocks) from the NI4462.
+The solution is to export the clock directly from the NI4462's oscilator module. Soldering iron required, but this is an easy modification.
+[Aside: could use PXI_CLK, but only with the PXI boards, not the PCI ones]
+
+
+Actually wiring it up:
+
+
+1. Both the NI4462 and Pulseblaster now share exactly the same clock. The NI's clock is sent over twisted pair using an FIN1001 LVDS transmitter, and
+   a FIN1002 receiver mounted on the Pulseblaster. The Pulseblaster uses a 100 MHz oscillator module plugged into a 14-pin DIL socket; this is easy
+   to replace with the LVDS receiver. A short (30cm) length of unshielded twisted pair connects the two cards.
+   Details at: http://forums.ni.com/t5/Multifunction-DAQ/How-to-get-a-regular-clock-10-MHz-20-MHz-or-100-MHz-from-the-NI/td-p/1969719
+   
+2. A similar approach is used for the trigger-delay circuit (see "arduino delay"): the NI4462's 100 MHz clock is exported with a second
+   FIN1001/FIN1002 pair, and a divide-by-4 counter to provide the FIFO with 25 MHz; the trigger pulse is then routed via the FIFO to PFI0.
+
+3. The Pulseblaster's trigger input is delayed, using a D-type flip-flop (74VHC74) to synchronise HW_Trigger with the NI4462's RTSI 6. This slightly
+   delays HW_Trigger (wrt UTC timestamp), but makes sure that the PB and NI never have any change in synchronisation. IT'S NECESSARY TO
+   SET THE NI INTO REFERENCE TRIGGER MODE AT ALL TIMES TO USE THIS; otherwise the PB will never start, and in turn will never hardware-trigger the NI!
+
+
+NOISE MEASUREMENTS AT DIFFERENT RANGES
+--------------------------------------
+
+The hardware was configured (ni4462_test) to sample 200k points at 200 kHz, on channel 0, in dc-coupling, differential mode.
+The input was connected to a 10 k resistor (a source of thermal noise) and exposed to some residual mains hum, (despite shielding).
+The voltage was set to the specified range, and then data was measured twice, once using DAQmxReadAnalogF64() and then again using
+DAQmxReadBinaryI32().  From these, it's possible to calculate the number of bits used internally by the ADC.
+
+
+	Voltage		Gain		StdDev		StdDev		bits		bits
+	Range 				Float		Int32		per		fullscale
+	(+/- V)		(dB)		(uV)		(int)		uV		(logarithm)
+	-------		-----		------		------		----		----------
+
+	100		-20		321		3447		10.7		30.99  => 31
+
+	31.6		-10		240		8114		33.8		30.99  => 31
+
+	10		0		156		16706		107.1		30.99  => 31
+
+	3.162		10		156.6		7047		45.0		28.1   => 28
+
+	1		20		158		81596		516.4		29.9   => 30
+
+	0.3162		30		157		295087		1879.6		30.15  => 30
+
+
+Calculations:
+  -    bits_per_uV         =  StdDev_Int32 / StdDev_Float_uV
+  -    bits_fullscale      =  log_2 ( bits_per_uV * (2 * Voltage_range * 1E6) )
+
+Conclusions:
+
+  - There is quite a lot of noise from the mains hum component. (Viewing with dat2wav confirms this).
+  - There is less noise at the higher gain settings. (but typically the ADC has 2.8 uV of noise, so perhaps not relevant).
+  - At the 3.162 V range, there is a surprising dip in the number of bits.
+
+
+
+Second experiment: make a group of 10 measurements of StdDevFloat and StdDevInt32 at different voltage ranges.
+
+1V range:
+	StdDevFloat:	158.1, 158.3, 158.1, 1457.9, 158.0, 157.99, 157,85, 158.07, 157.9, 157.8
+	StdDevInt32:	81786, 81695, 81523, 81363, 81462, 81949, 81345, 81285, 81184, 81017
+
+3.16V range:
+	StdDevFloat:    156.3, 156.3, 156.5, 156.3, 156.49, 156.5, 156.47, 156.62, 156.78, 156.42
+	StdDevInt32:    6598, 7054, 7154, 6974, 7018, 7494, 7663, 7159, 7080, 7757
+
+
+For each of these data sets,  Z = stdev/mean is calculated, and are, respectively:   0.00100,  0.00345,  0.00097, 0.047
+
+NOTE that there is something very weird here. Z should be dimensionless, and should be the SAME whether we use the
+Integer32 method ( DAQmxReadBinaryI32() ) or the FloatV method ( DAQmxReadAnalogF64() ), of obtaining data.
+
+BUT... Int32 is always worse for S/N than FloatV, and is specifically very much worse in the particular case of the 3.16V range!!
+
+(All other ranges were similarly checked; the 1V data above is representative of 31V, 0.31V, 10V, 100V;  only the 3.16V range sticks out.)
+
+
+Conclusions:
+   - Use the DAQmxReadAnalogF64() function and not the DAQmxReadBinaryI32() function.
+   - specifically, avoid using DAQmxReadBinaryI32() combined with the 3.16V range.
+
+
+BUT.. see below: Analog measurements in the "interference/" directory.  Here, instead of a 10k resistor, the input is shorted and grounded. We find the OPPOSITE,
+namely, that on the 0.3V range, there is only 2.6uV of noise (stddev), whereas on the 31V range, there is 178 uV of noise!
+   
+
+
+BEWARE OF LOOPED TASK COMMIT
+----------------------------
+
+According to the docs, the correct way to read N samples every time an external trigger arrives is to
+  * Configure the NI4462
+  * Commit the task.		/* DAQmxTaskControl (taskHandle, DAQmx_Val_Task_Commit); */
+  * Loop: { StartTask, Read Data, StopTask }
+This is especially relevant if there is a need to settle the AC coupling capacitors, as taskCommit is where the input-relays actually activate.
+
+BUT.. !! This causes a particularly nasty and subtle bug. (present in 8.0, 8.02, and even in Windows)
+See ni4462_bug_dont_use_commit.c  and http://forums.ni.com/t5/Multifunction-DAQ/Bug-DAQmxReadAnalogF64-DAQmx-Val-Auto-DAQmx-Val-WaitInfinitely/m-p/1933361
+
+Otherwise, AnalogReadF64 will randomly fail, either by reading too few samples and either throws an erroneous underflow (-200278) error, or returns
+fewer samples than it must [in blocking mode]. The error is *probabilistic*, but quite frequent. More details, and a demo are in: ni4462_bug_dont_use_commit
+The probability of crashing in a given loop differs according to random starting conditions: Many crashes are on loop 2, but some take ~14.
+
+BUT... if we use the implicit commit that happens during startTask (for an uncommitted task), then this first startTask takes longer (~45ms) to compensate.
+Even worse, ALL the startTask()s in the main loop take much longer (measured: ~0.4ms with commit; ~7ms without). !!
+
+It also looks like the problem only happens (or at least is much more frequent) at lowish (< 2kHz) sample frequencies. Some quick experiments show that, for n=100,
+crashes occur sooner or later (usually sooner) for f=32,100,1000,1500, but 2k and above seem to be OK. [The state of LF_ENHANCED_ALIAS_REJECTION doesn't matter,
+nor do changes to n.] See: ni4462_experiment_readanalogf64_params.c (and change the #defines at the top).
+
+In addition, using Continous acquisition  (DAQmx_Val_ContSamps) rather than Finite acquisition (DAQmx_Val_FiniteSamps) seems to cure this, even at low freq.
+
+
+EXPERIMENT:
+	FREQ=10000; for ((i=0; i<100; i++)); do ./ni4462_capture -f $FREQ -m 100 ;
+	if [ $? == 0 ] ;then echo "OK ($FREQ)" >> capture.log; else echo "CRASH ($FREQ)" >> capture.log; fi;
+	usleep $((RANDOM*100)); done
+
+	#At freq 100, it crashes. But at 10000, it ran 127 times consecutively without trouble. That's reasonably conclusive :-)
+
+
+CONCLUSION:
+	- If there is no looping, it's OK to use taskCommit
+	- If there is looping, BUT the sample-freq > 2kHz, taskCommit is (probably) OK. [which is just as well, given the performance hit without it]
+	- If there is looping, and sample-freq <= 1kHz, don't use taskCommit, or one of the loops will eventually fail with an erroneous error.
+	  ...but this is still (probably) ok, if the acquisition mode is continuous, rather than finite.
+
+	i.e.
+	if ( (sample_frequency is low) && (we used taskCommit) && (we loop over taskStart...taskStop) && (Acquisition mode is finite) ){
+		/* This bug will strike. Program will eventually crash, either with an erroneous underflow (task stops prematurely) or a blocking-read returns too few points */
+	}else{
+		/* Seems to be OK */
+	}
+
+	- Frequencies of 32,100,1500 Hz are "low", whereas 2kHz and above seem to be fine.
+	- The setting of Enhanced_LF_Alias_Rejection is irrelevant
+	- The number of samples per frame doesn't seem to matter.
+	- Whether we use blocking or non-blocking reads doesn't make much difference.
+
+
+Or, workaround: export the NI4462 clock to the other systems; they will then remain perfectly in sync without any form of "dead-reckoning". Only trigger once.
+	
+	
+FILTER DELAY
+------------
+
+The ADC and digital filtering chain causes a fixed delay of 63 samples. This makes the trigger appear "early", i.e. we capture data
+that arrived BEFORE the trigger pulse.
+See: "NI Dynamic Signal Acquisition User Manual" section 2-23, or http://digital.ni.com/public.nsf/allkb/F989B25FF6CA55C386256CD20056E27D
+("Why Is My Data Delayed When Using DSA Devices?") or ni4462_test.c for an example.
+There is more information in the section "Digital Filter Group Delay" at http://zone.ni.com/devzone/cda/tut/p/id/11369 .
+
+ * Workarounds include:
+	- discarding the first 63 samples.
+	- chopping off the first 63, and appending them to the last group (if there is one, and groups are consecutive and aligned)
+	- delaying the trigger before it reaches PFI0 (either in the PulseBlaster, or with a dedicated delay-circuit: see "arduino_delay").
+	- Using DAQmxSetStartTrigDelay(), if it were supported on this device, which it isn't!
+
+ * The value of 63 can be slightly fewer if "Enhanced Low Frequency Antialiasing" is on and sample-rate is lower. This feature is
+   automatic oversampling & decimation (at lower sample frequencies). See  /usr/local/natinst/nidaqmx/docs/mxcprop.chm/attr2294.html
+   The delay-time is given in the table "ADC Filter Delay" in "NI 446x Specifications datasheet", and varies from 32_and_a_bit to 63 samples.
+
+ * The offset doesn't affect Analog triggering, only digital triggering)
+
+ * The 63 sample delay is ~307.6 us (at 204.8 kHz). Even if we fix the synchronisation, the outer-control-loop will have at least this delay.
+ 
+ * For some measurements, see ni4462_characterise, and the digital performance tests below.
+
+
+ARDUINO DELAY
+-------------
+
+The solution to the "63" sample delay is insert an external delay-line between the real trigger pulse and PFI0. This way, we can configure how
+long to delay, don't have to fix it up in software, and, we don't lose the tail from a previous dataset before the start of the current one.
+The arduino_delay program (and circuit) has the full details; in short:
+ 
+   * A FIFO is inserted between the real trigger pulse and PFI0.
+   * This FIFO is clocked at _exactly_ 25 MHz (derived as above from the NI4462's own 100MHz clock, via FIN1001/FIN1002 and a /4 counter).
+   * The FIFO pre-fill level (i.e. delay-line length) can be set (or bypassed) by an Arduino, connected over USB.
+   * This has very fine control: the FIFO may be bypassed, or varied between 5120 ns -> 15.728640 ms
+   * The trigger pulse delay is quantised within 40ns, which (compared to 5us sample-rate) is nearly perfect.
+
+
+   
+BLOCKING AND NON-BLOCKING READS
+-------------------------------
+
+DAQmxReadAnalogF64() has too many parameters, which, when combined with DAQmxSetReadReadAllAvailSamp() and DAQmxCfgSampClkTiming()
+leads to (at least) 16 permutations!  Only 4 of these are useful, and some of them return an error even though there shouldn't be.
+The documentation at /usr/local/natinst/nidaqmx/docs/daqmxcfunc.chm/daqmxreadanalogf64.html is correct, but very unclear.
+
+ * ReadAllAvailSamples. It means "Read only the available samples, then stop". This is controlled by DAQmxSetReadReadAllAvailSamp()
+
+ * Finite or Continous sampling. This is controlled by DAQmxCfgSampClkTiming( DAQmx_Val_FiniteSamps | DAQmx_Val_ContSamps)
+
+ * Number of samples to read this time. This is numSampsPerChan (2nd) parameter of DAQmxReadAnalogF64(), usually either 0, N, or DAQmx_Val_Auto,
+
+ * Timeout. How long to wait before giving up. This is the timeout (3rd) parameter of DAQmxReadAnalogF64(), usually 0, DAQmx_Val_WaitInfinitely, (or a number of seconds)
+
+
+SUMMARY: This is the best way (and clearest) way to do it....
+
+  *  Always check the return value (retval of these 4 below is always zero, unless something very bad happens).
+
+  *  ReadAllAvailSamples = TRUE		(always)						#Alters behaviour of DAQmx_Val_Auto.
+
+  *  For Finite sampling:
+
+	Blocking read of N:	SampsPerChannel=N (where N > 0). Timeout=Infinite.		#Always returns N samples.
+
+        Non-blocking read:	SampsPerChannel=Auto. 		 Timeout=Infinite [**]		#Returns 0...K samples; K is limited by buffer size and total num_samples configured.
+
+
+  * For Continous sampling:
+
+	Blocking read of N:	SampsPerChannel=N (where N > 0). Timeout=Infinite		#Always returns N samples.
+
+        Non-blocking read:	SampsPerChannel=Auto. 		 Timeout=0			#Returns 0...unlimited samples; (limited by buffer size)
+
+
+[**] For normal digital triggering, the behaviour of Timeout=Infinite and Timeout=0  is exactly equivalent, and using 0 is much clearer syntactically.
+     BUT, Timeout=0 combined with reference-triggering can throw error -200281, whereas Timeout=Infinite won't. So use the latter.
+
+
+
+EXPERIMENTATION:  See: tests/ni4462_experiment_readanalogf64_params.c  (and change the #defines)....
+
+
+Mode	   ReadAvailSamples	SampsPerChannel	Timeout		Usable? What happens?
+------	   ----------------	---------------	-------		-------	-------------------------------------------------------------------
+Finite		False		Auto (-1)	0		N	Nonblocking read, 0 samples, (returns err because timeout elapses.)
+Finite		False		Auto		Infinite (-1)	Y	Blocking read,    100 samples.  (No error)
+Finite		False		N		0		N	Nonblocking read, 0 samples, Returns Error (because timeout elapsed)
+Finite		False		N		Infinite	Y	Blocking read,    100 samples.  (No error)
+
+Finite	[1A]	True		Auto		0		Y	Nonblocking read, 100 samples (via loop), no error.
+Finite	[1B]	True		Auto		Infinite	Y	Nonblocking read, 100 samples (via loop), no error.
+Finite		True		N		0		N	Nonblocking read, 0 samples, (returns err because timeout elapses)
+Finite	[2]	True		N		Infinite	Y	Blocking read,    100 samples, (No error)
+
+Cont.		False		Auto		0		Y	Nonblocking read, 100+ samples (via loop), no error.
+Cont.		False		Auto		Infinite	Y	Nonblocking read, 100+ samples (via loop), no error.
+Cont.		False		N		0		N	Nonblocking read, 0 samples, (returns err because timeout elapses)
+Cont.		False		N		Infinite	Y	Blocking read,    100 samples, (No error)
+
+Cont.		True		Auto		0		Y	Nonblocking read, 100+ samples (via loop), no error
+Cont.		True		Auto		Infinite	Y	Nonblocking read, 100+ samples (via loop), no error.
+Cont.		True		N		0		N	Nonblocking read, 0 samples, Returns Error (because timeout elapses)
+Cont.		True		N		Infinite	Y	Blocking read,    100 samples, (No error)
+
+Normally, use: [1B] and [2].
+[1B] is a Non-blocking read: will return immediately, with 0...n samples.
+[2] is a blocking read, it will wait till all N samples are available; useful with N=1.
+
+[1B] and [1A] both do exactly the same thing: non-block (immediate timeout), return all samples that are available, which could be 0.
+[1A] is the clearer syntax, BUT has a weird side effect in in reference-trigger mode, causing error -200281:
+ "Reading relative to the reference trigger or relative to the start of pretrigger samples position before the acquisition is complete."
+So use [1B] which is safe in both normal triggering and reference triggering mode.
+
+NOTE: if  ( (sample_frequency < 2kHz)  &&  (we used taskCommit)  &&  (we loop over start...stop) && (Acquisition mode is finite) ),
+then it's problematic to use ANY of these modes in a loop. Otherwise, it's OK.
+
+
+
+LOOP PERFORMANCE
+----------------
+
+On the existing camera, (using a 286 PC running DOS!) we run at 5 kHz, restarting a synchronised "reset, integrate, multiple-read" cycle every 200ms.
+One might therefore expect that this hardware, 20 years later, would be capable of responding to triggers on a similar timescale. Unfortunately,
+there is no hardware-retriggerable ability in the NI4462  [DAQmxSetStartTrigRetriggerable() is unsupported], so we must resort to using the
+C-library, and calling taskStop...taskStart in userspace!
+
+Experimental performance is measured by:  ni4462_experiment_task_performance.c
+which does:
+	Configure task. Set sample_freq = 200 kHz, N_samples = 20-200,  Finite acquisition.
+	Commit task
+	while (1){
+		StartTask	//Wait for trigger.
+		ReadData	//Tight loop, non-blocking reads of 20-200 samples as they become available.
+		StopTask
+		printf ()	//One line, printing the times taken by the 4 instructions.
+	}
+
+This loop does nothing else (except for some gettimeofday() calls for instrumentation), and the data is ignored.
+PFI0 is driven at 1 MHz, so the trigger delay is < 1us.
+The CPU is forced to be flat out (1.8 GHz), by running "nice yes >/dev/null" on another core, and this process is run "nice -n -20"; this reduces times, and variability.
+The results are:
+
+	taskStart:	0.46 - 0.70 ms
+	taskStop:   	0.22 - 0.30 ms
+	Read:		0.55 - 0.57 ms		# n = 20   (expect 0.1ms)
+	Read:		1.33 - 1.58 ms		# n = 200  (expect 1.0 ms)
+	Printf:		0.04 - 0.07 ms
+
+But this is WAY too slow. The overhead of starting, stopping (and reading) the task is too great.
+We need to get these function calls to run 100x faster: in a 200 us frame, we might have 40us max to waste on overhead.
+See also: http://forums.ni.com/t5/Multifunction-DAQ/Fast-retriggering-without-Stop-Start-overhead/td-p/1935515
+
+Options:
+  * Use hardware triggering. Sadly, this £4000 card lacks the performance of a 286 PC, or a cheap oscilloscope!
+
+  * Speed up the software, by doing it in the kernel. This might work, iff we could busy-wait, and sacrifice a CPU core. See "KERNEL DRIVER" below.
+    Note that, even if we did get a kernel driver to work, it isn't guaranteed that the performance would be adequate. We also wouldn't know till
+    after doing 3 weeks' work whether, even with an instantaneous response for taskStop/taskStart, there might be any other delays in the hardware
+    itself, (or perhaps, if there is a 306 us processing pipeline, we might not be able to have multiple triggers in flight at once?)
+
+  * Use a different device (but the NI 4462 is the only moderately fast 24-bit ADC on the market)
+
+  * Live with it. This is tricky: the clock has ~ 40ppm accuracy (over the long term), and combined with a similar accuracy from the PulseBlaster,
+    it seems improbable that we could get 1 second of data, at 200 kHz, while keeping the resets and the ADC conversions synchronised by pure
+    dead reckoning. This is like trying to get a team of synchronised swimmers to stay together with no music, just a starting pistol!
+    But...out of necessity, there may be a way. The clocks aren't accurate, but may be calibrated, and at least the NI 4462 clock may be very
+    finely adjusted: about 1 part per billion.
+	=>  Usable, with care, both for full-frame reads, and for the COAST sweeps with multiple {reset-read} per second.
+
+  * Synchronise the PulseBlaster and NI 4462 clocks, then use larger frames. This is easy... albeit with a bit of soldering! See (RTSI and CLOCK outputs)
+	=> This is the solution I chose: it solves the problem perfectly, but is rather ugly.
+  
+  * Expect about 0.8 ms of latency per frame (if doing stop/start) - is this ok?
+
+
+WRITING A GPL'd REPLACEMENT KERNEL DRIVER?
+------------------------------------------
+
+To write a proper (and GPL) kernel driver, we'd really need the Register-level programming docs for the NI4462. NI normally supply such docs
+with most of their hardware as part of the "Driver Development Kit", part of DAQmx-Base. But for some reason, the 4462 isn't included,
+and NI are unwilling to help.
+
+This would therefore necessitate reverse-engineering it. An instrumented copy of nikal.c is included in: ../../ni-daqmx/installation/nikal-hack/
+and this basically just printk()s everything that is sent to and from the card.  Combined with lots of syslogging from ni4462_test.c, (invoke with -D),
+we get something like this: doc/ni4462_test_syslog.txt
+
+It is possible (but not necessarily probable) that we could improve on the LOOP-PERFORMANCE by having a better Kernel driver. Otherwise, the existing
+one is perfectly adequate (functionality, accuracy), excepting that it only runs on (now) obsolete kernels. A driver rewrite would also require 
+rewriting some of DAQMx(), so would be quite a large project...
+
+
+PRE-AMP SATURATION
+------------------
+
+If the pre-amp saturates (because of voltage overload), this can take ~ 1 second to recover. See: doc/saturation/postoverload.png
+This is problematic when the overload is "removed" by increasing the voltage-range: the first set of data (on the new range) is now corrupted by the transient.
+
+It's exacerbated because the voltage-range is only applied on taskCommit, and that there's no way to discover the previous settings of the voltage-gain
+before we create the channel in a new task; so we can't detect that the user has increased the voltage-range and warn (or delay 1 second) in case.
+
+Example:
+0. Apply a constant +4.5V DC  to channel 0. (for all these tests).
+
+1. Measure for 1 second on the 3V range. This will overload the pre-amp, and we get garbage:  See: doc/saturation/overload.png
+   $  ni4462_test -c 0 -v 3 -n 20000 -f 20000 -i dc -m diff -t now -s overload.dat
+   => Fatal Error: an overload has occurred, in channel(s): 'VoltageInput'. Beware preamp saturation transient.
+
+2. Now measure for 1 second on the 10V range. This SHOULD be OK. But the data is noisier than it should be. See: doc/saturation/postoverload.png
+   Note the stddev is 202 uV, and look at the plot. It's clear that the ADC input is taking some time to recover. What's happening is that the ADC pre-amp is not 
+   being allowed to stabilise between changing range and starting to sample.
+   $  ni4462_test -c 0 -v 10 -n 20000 -f 20000 -i dc -m diff -t now -s postoverload.dat
+   => Measured 20000 samples on channel 0 at 20000.0000 Hz.  Voltage: +/- 10.000 V. Gain: 0.0. Coupling: dc. Terminal mode: diff. ADC delay discard: 0.
+   => Mean is 4573.9996 mV,  stddev is   201.9164 uV,  num is 20000 samples. (Channel: 0.)
+
+3. Now measure for another second on the 10V range. This time, the data is correct. See: doc/saturation/recovered.png
+   $  ni4462_test -c 0 -v 10 -n 20000 -f 20000 -i dc -m diff -t now -s recovered.dat
+   => Measured 20000 samples on channel 0 at 20000.0000 Hz.  Voltage: +/- 10.000 V. Gain: 0.0. Coupling: dc. Terminal mode: diff. ADC delay discard: 0.
+   => Mean is 4573.4972 mV,  stddev is    17.8286 uV,  num is 20000 samples. (Channel: 0.)
+
+Note: the root-cause is pre-amp saturation, not changing range. If the overload is removed (in the 3V context) before the range is increased, there is no problem.
+For example this is fine: 3V range with 5V signal which drops to 1V, then increase range to 10V.
+
+For experimentation, adjust the number of junk samples (-j) in ni4462_test.c.  I measured that 10k samples (at 200kHz) gets rid of most of the transient; 1 second is effectively perfect.
+
+Solution: delay for 1.0 second between taskCommit and taskStart to allow the preamp to settle. This is implemented as ni4462_test.c, option -g. Unfortunately, it can't be auto-detected.
+
+
+
+PERFORMANCE TESTS - DIGITAL
+---------------------------
+
+An "ideal" ADC would sample the signal once on every trigger, at the exact moment of the falling-edge trigger, and with zero error, subject only to the
+requirement of the trigger-pulses being at least 5us apart.
+BUT, we are using a "continuous" sampling process (sigma-delta), with oversampling. This differs from ideal as follows:
+
+- Samples aren't triggered separately, but (as a task) in a group of many at specific intervals, complete with internal "oversampling"
+- There is a digital filter delay of "about" 63 samples.
+- The sampling isn't an array of delta-functions, but smeared out, due to oversampling, over at least one whole sample-period.
+- Finite analog bandwidth may increase this smearing further - the "setup and hold" times for a sample might be quite poor, perhaps +/- 10us.
+- Gibbs phenomenon.
+
+For some measurements of this, see the script ni4462_characterise.sh and the doc/digital/ directory.
+[Note: ni4462_characterise.sh uses some extra hardware to generate the pulses: a PulseBlaster and Arduino/FIFO. Alternatively, just send the same TTL square wave into PFI0 and AnalogInput_3]
+The input signals are "5V TTL square waves", which typically don't quite reach the supply rails. In the specific case of the PulseBlaster, used for these experiments (eg doc/digital/basic/basic.png), 
+the Pulseblaster->NI4462 is connected via an open-collector optic-fibre receiver, whose 5V rail is actually about 4.7, and whose pulldown isn't perfect (but it's designed for CMOS inputs).
+
+Note that NUMBERING here is ZERO-BASED.  (So sample #0 is the first data point; sample 100 is the the 101st data point).
+
+Defaults (used by ni4462_characterise below, unless overridden):
+  Pulse delay			(-a):  0ms
+  Pulse length			(-b):  1ms
+  Arduino delay			(-c):  0us
+  Pretrigger samples		(-p):  2		#At least 2.
+  Number of samples		(-n):  50
+  Discard initial samples	(-j):  50
+  Sample frequency		(-f):  200000
+  Trigger edge			(-t):  fe
+  Internal edge			(-e):  fe
+  Terminal mode			(-m):  pdiff
+  Enhanced LFAR			(-l):  off
+  Input coupling		(-i):  dc
+  Voltage range:		(-v):  10
+
+
+We want to know:
+	Oscilloscope: yes, this input voltage is a really good, clean step. All artefacts seen are because of the NI4462, not the underlying signal.
+
+	Basic test: does it work?  (directory: basic/)
+		ni4462_characterise -o basic
+			=> yes it works. Nice demo of a rising edge. Signal steps from 0.503 V to 4.735 V
+
+	How repeatable is it, between runs of the identical experiment?  (directory: repeat/)
+		ni4462_characterise -o repeat1     (and repeat2...4)
+		paste repeat1.dat repeat2.dat repeat3.dat repeat4.dat > repeat_combined.dat ; dataplot -o auto repeat_combined.dat
+			=> Very repeatable: the curve features are the same, so is the point positioning. Even the precise artefacts are repeatable between runs!
+			NOTE: this is mostly because the PB's triggering is synchronised to the NI's sample-clock. So there's no jitter between them.
+			
+	Clock sync: (directory: clock_sync/)
+		Check the values of -a (pulse delay), -b (pulse length), -c (arduino delay). The PB and Arduino are driven directly from the NI's clock, so this should work perfectly.
+		ni4462_characterise -o  a0ms_b1ms_c0us -a 0 -b 1ms -c 0 -f 200000 -n 1000 -j0				#basic   (rise at 65, fall at 265 samples)
+		ni4462_characterise -o  a0ms_b1ms_c0us_p20 -a 0 -b 1ms -c 0 -f 200000 -n 1000 -j0 -p 20			#Increase pretrigger samples from 2 to 20. (rises at 83, fall at 283)
+		ni4462_characterise -o  a0ms_b1001ms_c0us -a 0 -b  1001ms  -c 0 -f 200000 -n 300 -j200000		#increase pulse length by 1 second.  (rises at 65, falls at 265+200000 samples)
+		ni4462_characterise -o  a0ms_b30001ms_c0us -a 0 -b 30001ms -c 0 -f 200000 -n 300 -j6000000		#increase pulse length by 30 secs (rises at 65, falls at 265+6000000 samples)
+		ni4462_characterise -o  a10000ms_b1ms_c0us -a 10000ms -b 1ms -c 0 -f 200000 -n 400 -j 2000000		#start the pulse after 10 seconds, still 1ms long. (rises at 65+2000000 samples falls at 65+2000000 samples)
+		ni4462_characterise -o  a15ms_b1ms_c15ms -a 15ms -b 1ms -c 15ms -f 200000 -n 1000 -j0			#start the pulse after 15ms, delay trigger 15ms. Cancel out (as expected): (rise at 65, fall at 265 samples)
+			=> Pretrigger     (-p) captures some samples before the trigger pulse, exactly as expected. 
+			=> Pulse length   (-b) is perfectly synchronised/calibrated over 1, and 30 seconds, as it should be, since PB and NI use the same oscillator.
+			=> Pulse delay    (-a) is perfectly synchronised/calibrated over 10 seconds, as it should be, since PB and NI use the same oscillator.
+			=> Trigger delay  (-c) is perfectly synchronised/calibrated over 15 ms, as it should be, since Arduino and NI use the same oscillator.
+			=> The delays  (-a,-c) cancel as expected:  if b -> b + x, and c -> c + x,  then we get the same result, whatever the value of x.
+			=> NOTE: we *must* operate in reftrigger mode. This adds a minimum of 2 samples (the default), which accounts for the difference between a "63-sample" filter delay, and the observed value of 65.
+			
+	What is the effect of the basic parameters?
+	Coupling (AC/DC):  (directory: coupling/)
+		ni4462_characterise -o coupling_dc  -i dc
+		ni4462_characterise -o coupling_ac  -i ac
+		ni4462_characterise -o coupling_dc_100ms -i dc -n 20000
+		ni4462_characterise -o coupling_ac_100ms -i ac -n 20000
+			=> At high frequency (short run-length), no distortion; it just removes the DC offset, like a good 'scope should.
+			=> BUT, over the 100ms timescale, there is a visible transient from the coupling capacitor.
+			=> * Never use AC coupling for the Hawaii sensor!
+
+	Diff/Pdiff mode:  (directory: mode/)
+		ni4462_characterise -o mode_pdiff  -m pdiff
+		ni4462_characterise -o mode_diff  -m diff
+			=> Slight difference in DC offset [when, as here, the dewar is connected], nothing else. Use differential mode normally, but
+			   use pdiff mode for ni4462_characterise, simply because when the dewar and Hawaii is NOT connected, the inverting input otherwise floats.
+
+	Voltage range:     (directory: voltage_gain/)
+		ni4462_characterise -o 10v -v10
+		ni4462_characterise -o 3v -v3
+			=> Preamp saturation (and we get a warning) at the 3V level.
+
+	Internal clock edge:   (directory: int_edge/)
+		ni4462_characterise -o int_edge_falling -e fe
+		ni4462_characterise -o int_edge_rising  -e re
+		paste int_edge_falling.dat int_edge_rising.dat > int_edge_combined.dat ; dataplot -o auto int_edge_combined.dat
+			=> Really NO noticeable difference, not even in the timing (horiz-position). See the combined plots. The "edge" must certainly be that of the fastest internal clock, not the 200kHz sample clock!
+
+	Low frequency enhanced alias rejection:  (directory: lfear/)
+		ni4462_characterise -o freq200kHz_lfear_off -f 200000 -l off
+		ni4462_characterise -o freq200kHz_lfear_on  -f 200000 -l on
+		paste freq200kHz_lfear_off.dat freq200kHz_lfear_on.dat > freq200kHz_lfear_combined.dat ; dataplot -o auto freq200kHz_lfear_combined.dat -u "off,on"
+			=> At 200kHz, it makes precisely no difference either way.
+
+		Sample at 1kHz (and for slightly longer [200 samples, without discarding the initial 50 samples]. Keep the pulse length at 1ms (i.e. f ~= Nyquist).
+		ni4462_characterise -o freq1kHz_pulse1ms_lfear_off   -f 1000 -n 200 -b 1ms -j 0 -l off
+		ni4462_characterise -o freq1kHz_pulse1ms_lfear_on    -f 1000 -n 200 -b 1ms -j 0 -l on
+		paste freq1kHz_pulse1ms_lfear_off.dat freq1kHz_pulse1ms_lfear_on.dat > freq1kHz_pulse1ms_lfear_combined.dat;  dataplot -o auto freq1kHz_pulse1ms_lfear_combined.dat -u "off,on"
+			=> Turning LFEAR on reduces the filter delay from 66->34 (as expected).
+			   It also affects the size of the peak (this may be simply an artefact, given the timing of the samples and the shortness of the peak)
+			   Also, LFEAR reduces the amount of pre/post ringing/Gibbs from dreadful (10% overshoot, ~15 samples) to merely very bad (10% overshoot, ~9 samples long).
+		
+		Sample at 1kHz (and for slightly longer [200 samples, without discarding the initial 50 samples]. Make the pulse length 10ms (i.e. f < Nyquist).
+		ni4462_characterise -o freq1kHz_pulse10ms_lfear_off   -f 1000 -n 200 -b 10ms -j 0 -l off
+		ni4462_characterise -o freq1kHz_pulse10ms_lfear_on    -f 1000 -n 200 -b 10ms -j 0 -l on
+		paste freq1kHz_pulse10ms_lfear_off.dat freq1kHz_pulse10ms_lfear_on.dat > freq1kHz_pulse10ms_lfear_combined.dat;  dataplot -o auto freq1kHz_pulse10ms_lfear_combined.dat -u "off,on"
+			=> Square wave is now properly sampled. With LFEAR, the signal is almost respectable; without it, there is a LOT of ringing.
+			   The amplitudes are the same in both cases. But the Gibbs phenomenon (without LFEAR) is horrible.
+
+		Repeat this at 200kHz, to get the same sort of measurement, on the same timescale, then view them adjacent (can't be same plot without decimation)
+		ni4462_characterise -o freq200kHz_pulse10ms_lfear_off  -f 200000 -n 40000 -p 10000 -b 10ms -j 0 -l on
+		xli freq1kHz_pulse10ms_lfear_combined.png & xli freq200kHz_pulse10ms_lfear_off.png &
+			=> It's better. Interestingly enough, even *zooming in* still doesn't show the chronic Gibbs.
+
+		=> Conclusion: Use LFEAR when it's available. BUT, we're usually working at 200ksps, so this is irrelevant,
+
+
+	Sampling frequency:  (directory: freq/)
+		Sample 1kHz vs 200 kHz, long, short, very short pulses:
+			ni4462_characterise -o freq1kHz_pulse100ms   -a10ms -b100ms -f1000   -n400 -j0
+			ni4462_characterise -o freq200kHz_pulse100ms -a10ms -b100ms -f200000 -n40000 -j0
+				=> 1kHz Gibbs has amplitude =  380 mV (all 4 corners), duration ~ 24 samples = 24ms
+				   200kHz     has           =  67, 51, 112, 7 mV (BL,TL,TR,BR corners),  ~32 samples = 0.16ms.    [oddly, the unequal corners are repeatable.]
+					=> 200kHz appears to show far less Gibbs, because we are sampling faster; it's still the same number of samples, but the amplitude is less.
+
+			ni4462_characterise -o freq1kHz_pulse1ms   -a10ms -b1ms -f1000   -n200 -j0
+			ni4462_characterise -o freq200kHz_pulse1ms -a10ms -b1ms -f200000 -n4000 -j0
+				=> Pulse is cleanly resolved at 200k, not cleanly resolved at 1k. The 1kHz pulse is mostly visible, but only has about 3V pulse height.
+				   1k pulse has much more Gibbs amplitude. The 200k pulse also repeats the previous uneven corners, in the same pattern!
+
+			ni4462_characterise -o freq1kHz_pulse0.1ms   -a10ms -b100us -f1000   -n200 -j0
+			ni4462_characterise -o freq200kHz_pulse0.1ms -a10ms -b100us -f200000 -n4000 -j0
+				=> Stil quite clean at 200kHz; at 1kHz, it's still there, but now reduced to a 0.45V spike.
+
+			ni4462_characterise -o freq1kHz_pulse0.01ms   -a10ms -b10us -f1000   -n200 -j0
+			ni4462_characterise -o freq200kHz_pulse0.01ms -a10ms -b10us -f200000 -n4000 -j0
+				=> 200kHz is a spike, but mostly accurate; the 1kHz one is nor reduced to 56mV or so.
+				
+		Comparing a 10 SAMPLE pulse at 1kHz with one at 200kHz.
+			ni4462_characterise -o freq1kHz_pulse10_samps_10ms   -a10ms -b10ms -f1000   -n200 -j0
+			ni4462_characterise -o freq200kHz_pulse10_samps_50us -a10ms -b50us -f200000 -n2000 -j2000
+			ni4462_characterise -o freq1kHz_pulse10_samps_10ms_lfearon   -a10ms -b10ms -f1000   -n200 -j0 -lon
+				=> a 10 sample pulse at 200kHz looks very much like one at 1kHz (when LFEAR is on). When LFEAR is off, the 1kHz plot looks terrible.
+					=> LF_EAR is actually not an "enhancement", so much as a "if you turn this off, it gets worse!"
+						=> Why? The Instrument should be happier at low freq, so adding LFEAR should make it wonderful.
+
+		Compare 200kHz and 204.8 kHz sampling. 
+			ni4462_characterise -o freq200kHz_pulse50ms   -a10ms -b50ms -f200000 -n20000 -j0
+			ni4462_characterise -o freq204.8kHz_pulse50ms -a10ms -b50ms -f204800 -n20000 -j0
+			paste freq200kHz_pulse50ms.dat freq204.8kHz_pulse50ms.dat > freq200kHz_204.8kHz_combined.dat; dataplot -o auto freq200kHz_204.8kHz_combined.dat -u "200 kHz,204.8 kHz"
+				=> As expected, no significant change. (204.8k is the fastest we can go).
+
+		
+	Timings: (directory: timing/)
+		Start with a 100us (20 sample) pulse, aim to rise on the 100th sample. Note that there is a sample #0, and 63-later, we	normally see the start of the pulse rise. But
+		by pre-capturing 37 samples, we can make this start at sample 100.
+			ni4462_characterise -o 200kHz_redge_100 -f200000 -n200 -j0 -p37 -a0ms -b100us -c0
+			ni4462_characterise -o 1kHz_redge_100   -f1000 -n200 -j0 -p37 -a0ms -b100ms -c0
+				=> As expected, we get the rising edge on the 100th sample (regardless of frequency).
+	 
+	 
+		Now change the trigger delay. Adjust -c around 50us +/- 5us, (because arduino_delay has the limit that delay is >5us, or zero. Increase j by 10 to compensate)
+			ni4462_characterise -o 200kHz_c50us -f200000 -n200 -j0 -p47 -a0ms -b100us -c50us	#rising edge at 100
+	
+			ni4462_characterise -o 200kHz_c45us -f200000 -n200 -j0 -p47 -a0ms -b100us -c45us	#rising edge at 101
+			ni4462_characterise -o 200kHz_c49us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49us	#rising edge at 101
+			ni4462_characterise -o 200kHz_c49.5us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49.5us	#rising edge at 101
+			ni4462_characterise -o 200kHz_c49.6us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49.6us	#rising edge at 101
+			ni4462_characterise -o 200kHz_c49.65us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49.65us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c49.7us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49.7us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c49.8us -f200000 -n200 -j0 -p47 -a0ms -b100us -c49.8us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c50us -f200000 -n200 -j0 -p47 -a0ms -b100us -c50us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c51us -f200000 -n200 -j0 -p47 -a0ms -b100us -c51us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c54us -f200000 -n200 -j0 -p47 -a0ms -b100us -c54us	#rising edge at 100
+			ni4462_characterise -o 200kHz_c55us -f200000 -n200 -j0 -p47 -a0ms -b100us -c55us	#rising edge at 99
+				=> The effect of the trigger delay (-c) is quantised to within 1 sample period, in a very repeatable (low jitter) manner.
+				   (This is because we are synchronising the start of the process to RTSI6.)
+				=> The critical value is between 49.6 - 46.65.  i.e. triggering at 50 is always repeatable (though not in the middle of the zone).
+	
+		The interesting question is, what happens when the pulse's rising edge is moved around within the sample interval. 
+		So, change the value of the pulse-start point (-a). [This may be negative, but must be integer_ns, rather than float_us]
+			ni4462_characterise -o 200kHz_a${X}ns -f200000 -n200 -j0 -p37 -a${X}ns -b100us -c0; grep -v '#' 200kHz_a${X}ns.dat  | head -n 103 | tail -n 4
+			X=0;     		#same as before. Rising Edge at sample 100, V=0.8482		
+
+			X=-5000;                #rises at 99,  V=0.8515   
+			X=-4500			#rises at 99,  V=0.6137    (or at 100, V=4.0711  depending on choice)
+			X=-4000			#rises at 100, V=3.7518
+			X=-3500			#rises at 100, V=3.3874
+			X=-3000			#rises at 100, V=2.9977
+			X=-2500			#rises at 100, V=2.5996
+			X=-2000			#rises at 100, V=2.2059
+			X=-1500			#rises at 100, V=1.8235
+			X=-1000			#rises at 100, V=1.4630
+			X=-500			#rises at 100, V=1.1312
+			X=0			#rises at 100, V=0.8482
+			X=500			#rises at 100, V=0.6164     (or at 101, V=4.0752   depending on choice)
+			X=1000			#rises at 101, V=3.7472     (or at 100, V=0.4323   ")
+			X=1500			#rises at 101, V=3.3887
+			X=2000			#rises at 101, V=3.0001
+			X=2500			#rises at 101, V=2.6008
+			X=3000			#rises at 101, V=2.2030
+			X=3500			#rises at 101, V=1.8213
+			X=4000			#rises at 101, V=1.4591
+			X=4500			#rises at 101, V=1.1338
+			X=5000;  		#rises at 101, V=0.8481    (or at 102, V=4.3581    ")
+				
+				=> Firstly, it's not always exactly clear which sample is THE start of the pulse. 
+				   a=0, -500ns or +500ns give pulses where the majority of the rise-height occurs between two samples, whereas
+				   a=2500 puts a sample right in the middle of the rising edge.
+			
+		Now, what if the pulse is *short*? Consider a 5us pulse that is not really properly resolved (except with lucky timing).	
+		This generates a "spike". As the phase of a varies across a sample-period: what height is the spike's peak? how much energy is in it?
+		For each of these, measure the peak voltage, the DC-level (0.5067V) and the energy in the biggest 5 samples around the peak (subtract DC, square, add)			
+			for X in `seq -2500 500 4000`; do echo X is $X;
+			ni4462_characterise -o 200kHz_5us_a${X}ns -f200000 -n200 -j0 -p37 -a${X}ns -b5us -c0; grep -v '#' 200kHz_5us_a${X}ns.dat  | head -n 106 | tail -n 11 ;
+			echo X WAS $X;  echo "" ; echo ""; sleep 3; done
+
+			X		DC level (V)	Impulse (V)		File.		#impulse = Sqrt [sum over 5 samples around peak: ( Vi - V_dc )^2]
+			
+			-2500		0.506551	3.3910			200kHz_5us_a-2500ns.dat
+			-2000		0.506808	3.3910			200kHz_5us_a-2000ns.dat
+			-1500		0.506010	3.3919			200kHz_5us_a-1500ns.dat 
+			-1000		0.506346	3.3916			200kHz_5us_a-1000ns.dat
+			-500		0.506579	3.3917			200kHz_5us_a-500ns.dat
+			0		0.506972	3.3901			200kHz_5us_a0ns.dat
+			500		0.449145	3.4576			200kHz_5us_a500ns.dat
+			1000		0.506577	3.3769			200kHz_5us_a1000ns.dat
+			1500		0.506626	3.3566			200kHz_5us_a1500ns.dat
+			2000		0.509866	3.3336			200kHz_5us_a2000ns.dat
+			2500		0.506561	3.3256			200kHz_5us_a2500ns.dat
+			3000		0.506659	3.3280			200kHz_5us_a3000ns.dat
+			3500		0.506622	3.3382			200kHz_5us_a3500ns.dat
+			4000		0.506651	3.3361			200kHz_5us_a4000ns.dat
+
+			=> Sometimes, the majority of the power is in a single sample, sometimes it spreads across two.
+			   But the impulse in a group of samples around the peak doesn't vary very much.
+			   [Much of the (slight) variation above results from calculating with only 5 samples, rather than a larger window]
+
+			
+	CONCLUSIONS:
+		1. In most respects, this does what we might expect - and it is very repeatable between runs of the same experiment.
+		2. The filter delay really is equal to the specified 63 samples. For normal use, we must use reference-trigger
+		   mode for RTSI6 (so pretrigger_samples >= 2). So, to compensate correctly, either:
+			* pretrigger_samples = 2,  discard_initial = 65,  arduino_delay = 0ns
+			* pretrigger_samples = 2,  discard_initial = 0,   arduino_delay = 325us (i.e. 65 samples @200 kHz)
+		3. The pre-echo and post-echo of a pulse last for a LONG time (about 63 samples each side to decay to zero).
+		    => This is FATAL for the type of multiplexed signals I mostly want to use, where we switch the input pixel
+		       every single sample.   (Note that most of it is gone by +/- 16 samples, so we could probably cope with that for coarse measurements).
+		4. Perfect alignment of the triggering does not matter (because it wouldn't help separate the samples).
+		5. The camera's desired imaging mode is effectively dead, though we can still do good CDS-LinReg on fixed pixels.
+
+
+		
+			
+PERFORMANCE TESTS - ANALOG
+--------------------------			
+
+- The equivalent circuit model (in pseudodifferential mode) is that each of the inverting and non-inverting inputs acts like a
+(1M resistor parallel 217 pF capacitor) between that input and chassis-ground.
+
+- Gain: the device does what it should in terms of: absolute-gain, equal-gain on each channel.
+
+- Analog "setup and hold" time. There is, unfortunately, no information on what the values of Analog setup and hold time might be. One might wonder:
+  is the value of the Nth sample affected only by instantaneous voltage, or by average voltage over the preceeding sample period, or by average voltage from (N-0.5)th to (N+0.5)?
+  Or is there even more "leakage" across samples, because of finite bandwidth? This would't matter for sound capture, but it definitely *does* when we do full-frame imaging, because we 
+  are multiplexing totally unrelated pixels into the datastream on each successive sample. NI engineers don't know the answer. The solution is (probably) to implement guard samples, i.e. to 
+  discard every other sample, and update the multiplexer in the middle of the discarded data point.
+  [See above: it's about 63 samples either side! This is terrible for my application!]
+
+
+Some experiments - for data, see the directory doc/analog/ :
+
+- Sine waves:  (directory: sine/)
+	Function generator, output a pure sine wave, 100mV amplitude, connected directly to the NI4462 (and checked with 'scope). 4462 set to differential mode, sample at 200kHz. Not syncd.
+
+	1    kHz:	1ksine.dat		- perfect 1kHz spike in the FFT, recorded signal amplitude is 100mV (with std-dev = 0.068V as expected.)
+	10   kHz:	10ksine.dat		- ditto
+	50   kHz:	50ksine.dat 		- ditto
+	100  kHz:	100ksine.dat		- very strange plot, due to the 100kHz signal and 100kHz fsample being almost but not perfectly aligned.
+	200  kHz:	200ksine.dat		- strongly attenuated: ~ 0.5mV amplitude.
+	1000 kHz:	1000ksine.dat     	- strongly attenuated: ~ 0.8mV amplitude.
+
+- Square waves: (directory: square/)
+	Function generator now set to output a square wave, as above. (Not synced to sample clock)
+
+	100   Hz:	100Hzsquare.dat		- FFT as expected: sharp peaks in the ratio 1,1/3,1/5,1/7 etc. Raw data has 103mV amplitude, 16-samples of Gibbs in all 4 corners.
+	1     kHz	1ksquare.dat		- ditto
+	10    kHz	10ksquare.dat		- ditto - but the gibbs doesn't settle between one edge and the next.
+	50    kHz	50ksquare.dat		- signal appears significantly distorted, reduced to 92 mV, though the FFT is prefect.
+	100   kHz	100ksquare.dat		- 60mV amplitude, FFT still visible.
+	200   kHz	200ksquare.dat		- strongly attenuated signal (57uV), not much power anywhere, though the peak at 151 kHz is noticeable.
+
+- Triangle waves: (directory: triangle/)
+
+	100   Hz	100Hztriangle.dat	- Clean signal, stddev=56mV, FFT has peak at 100Hz, small at 300 and tiny at 500 Hz (as expected)
+	1     kHz	1ktriangle.dat		- ditto
+	10    kHz	10ktriangle.dat		- ditto
+	50    kHz	50ktriangle.dat		- ditto
+	100   kHz	100ktriangle.dat	- 34mV, differential clock drift apparent.
+	200   kHz	200ktriangle.dat	- 34uV - strongly attenuated.
+
+- Interference pickup: (directory: interference/)
+	Ch0, 0.3V range, dc-coupled, 200kHz, 20k samples (0.1s, >> 50 Hz), psueodifferential. 4m of triax-cable attached to the input. Triax connections are: Core -> In+;, Outer -> In-; Screen -> PC case ground.
+
+	antenna.dat	30cm wire antenna connected to core, others NC.  As expected: mains hum pickup:  stddev 8.7mV,  Almost all 50 Hz (slight 250 Hz).
+	open.dat	triax-plug open-ended. More jagged sine, stddev 0.31 mV
+	open2.dat	triax plug, open-ended, differential (not pdiff) mode. clean 50Hz pickup, stddev: 19mV
+	short.dat	core shorted to inner (not grounded). pdiff.  noise stddev: 2.7uV, nearly uniform noise spectrum (but with peak around 20 kHz)
+	short2.dat	ditto, but differential-mode. 2.7 uV noise.
+	shortgnd.dat	all 3 shorted, pdiff mode. stddev: 2.5uV, noise spectrum flattened.
+				=> Even with 4m of cable, the triax is essentially perfect.
+
+	shortgndlf.dat  sampling at 1kHz. stddev: 0.76 uV
+	shortgndlfe.dat ditto, with LF_EAR enabled.  stddev: 0.43uV 
+				=> lower frequency filter reduces pickup of the HF component of the noise.
+
+	all 3 shorted together, differential mode, 200kHz sampling:			
+	shortall_0.3.dat   0.3V range stddev: 2.56 uV		( 71.6 bits )
+	shortall_1.dat	   1V range.  stddev: 3.59  uV		( 30.1 bits )
+	shortall_3.dat	   3V range.  stddev: 8.55  uV		( 23.9 bits )
+	shortall_10.dat    10V range. stddev: 22.5  uV		( 53.8 bits )
+	shortall_31.dat    31V range. stddev: 177.5 uV		( 48.0 bits )
+	shortall_42.dat    42V range. stddev: 271.4 uV		( 22.7 bits )
+
+			=> MUCH noisier as the voltage range increases. Why does turning DOWN the gain 100x cause a 70x increase in noise?  Noise shaping, perhaps?
+
+	Now, remove the 4m triax, and connect 30 cm of co-ax (with BNC ends) to the NI input.
+
+	1.dat   open ended.					clean 50 Hz sine wave. stddev: 28 mV
+	2.dat   ground v-, v+ floats.				jagged sine wave, stddev: 11mV
+	3.dat   ground v-, 50ohm resistor across input.		noise, stddev: 2.53 uV
+	4.dat   ground v-, 10k  resistor across input.		noisy hum, stddev: 13.4 uV
+	5.dat   ground v-, 1M   resistor across input.		jagged sine wave, stddev: 483 uV
+	6.dat   ground v-, 1M and 100pF (parallel) across input. slightly different, stddev: 441 uV
+
+			=> Triax beats coax; mains him pickup significant about ~ 1k; shape of hum wave depends on the nature of the "antenna".
+
+
+	
+GENERAL ADC CONSIDERATIONS
+--------------------------
+
+* Sigma-Delta ADCs, ringing, and the Gibbs phenomenon:	
+
+1. What is Gibbs Phenomenon?   Truncation of the Fourier Series, i.e. Low-Pass Filtering:  http://en.wikipedia.org/wiki/Gibbs_phenomenon
+	=> One of (but not the only) source of Ringing artefacts (both pre- and post- edge): http://en.wikipedia.org/wiki/Ringing_artifacts
+
+2. Oscilloscope information: Tektronix paper: "Understanding Oscilloscope Bandwidth, Rise Time and Signal Fidelity"  http://www.kemt.fei.tuke.sk/predmety/KEMT434_RM/_materialy/Doplnkove zdroje/UnderstandingOscilloscopeBandwidth.pdf
+	=> variously, shows effects of sampling and interpolation.
+	=> p5, fig 10, vs Probe and Rise Time shows how insufficient bandwidth degrades the edges (R/C exponential).
+		=> WHY is this kind of "low pass filter" different from that which causes Gibbs? The RC one only degrates 2 rather than 4 corners, and has no ringing or overshoot; though it does also truncate high-frequencies.
+			=>  The answer is that, for small amplitude signals, an RC filter  ~ integrator ~ low-pass filter.BUT as the voltage across the resistor decreases,
+			    then we get the exponential-decay instead, and it is NOT a proper low-pass filter any more. Frequency spectrum here: http://www.dsplog.com/2007/12/02/digital-implementation-of-rc-low-pass-filter/
+			    [Aside: integrator = bass-boost/treble-cut; (c.f. differentiator = treble-boost/bass-cut), but unless a constant term is added, there is no breakpoint, and infinite gain for dc.]
+
+3. Delta Sigma ADCs:  http://en.wikipedia.org/wiki/Delta-sigma_modulation
+	=> When is a 24-bit ADC really a 2-bit ADC? Are Sigma-Delta ADCs worse than "ordinary" ADCs? This paper argues that a 16-bit SAR ADC beats a 24-bit S-D ADC, and that the S-D ADC has only 2-bits resolution of step-height!
+		http://hi-techniques.com/links/technotes/SigmaDelta_TechNote.pdf
+
+	=> Preshoot and overshoot: 17% error in amplitude! (Also, can't just look at a couple of samples,
+		=> [Possible "silver lining": although we have huge error in amplitude, it's 17% of the signal, not 17% of the headroom. So... if I'm measuring a small difference
+		   between 2 large voltages (i.e. 100uV signal, on 0.4V (or so) of bias), that 17% error might actually not be so hideous (especially if we can factor it into the calculation).]
+
+4. In Nyquist sampling, the "stairstep" doesn't ever exist: the samples are at discrete time instants, and the values is undefined between points. Explanation: http://xiph.org/video/vid2.shtml
+   But, though the analog sampling SHOULD be discrete times (array of delta-functions), this isn't actually what happens.
+
+
+
+* The PROBLEMS (for this specific application):
+
+1. We have a huge DC offset caused by (VBias - Reset_offset).
+2. We have a lot of uncertainty in the value of VReset from the capacitor noise (so can't subtract a constant)
+3. Our signal is tiny. (100uV peak)
+4. We can't AC couple because we care about the DC-levels (integration time up to several minutes; can't have an AC-coupling capacitor).
+
+	=> Need DC coupling and 24 bits. but the MSBs are wasted.
+
+5. We're trying to multiplex the pixels. So that Sample_n  and Sample n+1000000  refer to the same pixel (and the difference is our data).
+   BUT, Sample_n and n+2  are totally unrelated to each other.    [Even if we allow a gap of 1, discard sample_n+1, as the multiplexer swaps over]
+
+6. We have this timing information very accurately. But the ADC doesn't. So it:
+	- Makes individual samples which are (sigma-delta) spread over a whole T_sample, rather than instantaneous.
+	- Does Analog Low-pass filtering (useful for antialiasing, bad here)
+	- Does digital FIR filtering, over a +/- 63-sample window! This convolves samples N-63...N+63 together. But they are from different pixels.
+
+6a. Normally, if (f_sample < 2* f_signal + a bit), then we can't recover the amplitude of a wave. Consider plotting a sawtooth wave at 10Hz, and sampling at 20Hz...
+	- Nyquist says that for the fundamental freq, we're just about OK [assuming a perfect low-pass prefilter]; if we want to recover a sawtooth wave properly,
+	   we'd need bandwidth up to (say) 90 Hz, giving Nyquist at 180Hz, and 200 Hz for good measure. But, let's look at an undersampled ADC at 20 Hz.
+	- Iff we don't have prior info, then the amplitude that we measure for the sawtooth wave depends critically on exactly where the 20 Hz samples are taken (phase wrt the 10Hz).
+	- BUT, if we have PRIOR timing information to control the phase, and we know that the wave is a sawtooth (as I *do*), then we can choose to take the samples at exactly
+	   the right points, and get a correct amplitude measurement: we're using the Bayesian(?) prior to recover the one important feature from an undersampled wave.
+		=> This would work with a simple ADC (instantaneous, at-will, sampling).
+			=> But the NI assumption (analog LPF, sampling without (afaik) sample+hold, digital filtering), while good for "normal" ADC, completely and utterly messes up my ability to utilise the prior.
+			
+	=> This ADC is a terrible choice for my application. Pixel multiplexing (single read, per px) is insane and will convolute dreadfully.
+
+7. What if we gave up on pixel multiplexing, and just went for reading single pixels? Now, we're trying to get the amplitude of a pulse, or gradient of a sawtooth.
+   Our samples are "contaminated" by the garbage from >3 samples ago. Effectively, the setup/hold times are 63 samples.
+   If we average over 63 samples, does it help or not? We MIGHT (do we?) get the benefit of the SQRT(n) noise reduction? But we're turning our
+   already only-just-fast-enough-but-not-really ADC (200 ksps) into something that is really more like 1k sps.  Can we get any benefit from the resulting mess, or have we now thrown away our entire competitive advantage?
+
+
+NOTES (Credit: Theo Holloway):
+	* If the sample-delay is 63, that makes the FIR window 128 wide (half each side). That correlates (roughly) with this observation:
+		Input a step function. Count the number of samples for the ringing to fall below the noise level => about 32.
+
+	* If we have a simple pulse, we can recover the height by integration. (averaging over several samples, the impulse will be correct)
+
+	* There's no way to un-do the FIR filter: deconvolution could be done only if: we knew the internal filter coefficients; we had no rounding error; there was no decimation.
+
+	  => For the imaging mode, we're best with a 64-sample guard-band and reducing our array to 100x100px.
+		
+* Conclusion (for version 8!):
+	For the imaging mode, we're really trying to do 1 frame per second = 2 sample/per second per pixel; then share the ADC by time-division multiplexing.
+		-> Our true Nyquist freq is 2Hz (per pixel), not 200kHz (per channel)!
+		=> All the NI filtering cleverness is actually very unhelpful, and convolves the wrong data-points:  S_n and S_n+256k are related; S_n and S_n+1 are NOT.
+
+	Sigma-delta ADCs are BAD here: best to use a 16-bit real one.
+
+	We can't AC-couple, nor can we afford to waste high-bits. Best to very carefully measure the reset-level, then use a DC-servo. The voltage we want is
+	"about 100mV below V_reset"; get this either with an 8-bit DAC, or carefully from V_Reset + Variable resistor + buffer. Make it very low noise; then
+	subtract it from the signal (somehow without adding 100uV of noise!!)
+
+	Need a much higher sample-rate, OR a "simple" one-shot ADC.
+
+		
+
+	
+ABOUT THESE NOTES
+-----------------
+
+These notes were written by Richard Neill, after many painstaking tests. I'd be happy to assist others with questions, if I can; write to:  <ni4462 at REMOVE.ME.richardneill.org
+Free documentation: this information may be copied, redistributed and modified, provided that this notice is preserved (i.e. attribution and share-alike).
+
+	

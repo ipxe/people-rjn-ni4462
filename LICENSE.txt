@@ -1,0 +1,9 @@
+Copyright by Richard Neill <ni4462 at REMOVE.ME.richardneill.org> 2011-2013
+
+Most of this relies upon the National Instruments libnidaqmx. That is closed-source (though it is
+free [gratis] to download). As this is useless without that header and linking against libnidaqmx,
+this cannot be purely Free software, though it would be the author's intention to make it such. 
+
+Therefore, this is licensed under the GNU GPL v3+, but with an exception for linking against the proprietary
+library, libnidaqmx (or equivalent).
+
