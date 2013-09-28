@@ -1,4 +1,4 @@
-/* Copyright (C) Richard Neill 2011-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+/* Copyright (C) Richard Neill 2011-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software. You can
  * redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.  An exception is granted to link against 
  * the National Instruments proprietary libraries, such as libnidaqmx. There is NO WARRANTY, neither express nor implied.

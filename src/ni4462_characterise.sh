@@ -2,7 +2,7 @@
 #Generate a trigger and a loopbacked data-pulse for the NI4462. Plot a graph.
 #This allows characterisation of the exact delay-length, and the input characteristics (setup/hold time of the ADC, preamp bandwidth, etc)
 
-#Copyright (C) Richard Neill 2012-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+#Copyright (C) Richard Neill 2012-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software. You can
 #redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
 #either version 3 of the License, or (at your option) any later version. There is NO WARRANTY, neither express nor implied.
 #For the details, please see: http://www.gnu.org/licenses/gpl.html

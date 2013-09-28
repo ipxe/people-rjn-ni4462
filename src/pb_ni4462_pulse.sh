@@ -1,7 +1,7 @@
 #!/bin/bash
 #This loads the PulseBlaster with a trigger+pulse program to aid in calibrating the delay-line needed, and in measuring the analog "setup and hold times" for the NI's input.
 
-#Copyright (C) Richard Neill 2012-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+#Copyright (C) Richard Neill 2012-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software. You can
 #redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
 #either version 3 of the License, or (at your option) any later version. There is NO WARRANTY, neither express nor implied.
 #For the details, please see: http://www.gnu.org/licenses/gpl.html
