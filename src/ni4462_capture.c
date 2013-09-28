@@ -1,7 +1,11 @@
 /* Capture program for the IR camera. This loops indefinitely: wait for trigger; capture N data points, do linear regression, print stats, ....
    For parameter experimentation, look at ni4462_test.
-   Copyright Richard Neill <ni4462 at richardneill dot org>, 2011-2012. This would ideally be fully GPL'd free software, but it can't be (because it has to link against libnidaqmx).
-   Therefore, I release it as GPL v3+, but with an exception for linking against libnidaqmx.
+
+ * Copyright (C) Richard Neill 2011-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+ * redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.  An exception is granted to link against 
+ * the National Instruments proprietary libraries, such as libnidaqmx. There is NO WARRANTY, neither express nor implied.
+ * For the details, please see: http://www.gnu.org/licenses/gpl.html
 */
 
 /* Headers */

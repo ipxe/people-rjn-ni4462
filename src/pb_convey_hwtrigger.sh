@@ -5,6 +5,8 @@
 #This script activates RTSI6 till Ctrl-C'd.  It handles the Ctrl-C signal correctly.
 #In burst mode (-b), it only sends a burst of pulses, rather than continuous.
 
+#Copyright (C) 2013 Richard Neill. This is Free Software, released under the GNU GPL v3+
+
 #Options: comment out to change
 QUIET=">/dev/null 2>&1"		#Quieter?
 QUIET_NI=">/dev/null 2>&1"	#NI process quiet, even on error?

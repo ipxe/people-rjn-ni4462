@@ -1,7 +1,11 @@
 /* Test program to use the NI 4462 from National Instruments. See also NI's example:  Acq-IntClk.c
    Uses the internal clock and collects a finite amount of data, then processes it and prints the result. The various channel options can be configured here.
-   Copyright Richard Neill <ni4462 at richardneill dot org>, 2011-2012. This would ideally be fully GPL'd free software, but it can't be (because it has to link against libnidaqmx).
-   Therefore, I release it as GPL v3+, but with an exception for linking against libnidaqmx.
+
+ * Copyright (C) Richard Neill 2011-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+ * redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.  An exception is granted to link against 
+ * the National Instruments proprietary libraries, such as libnidaqmx. There is NO WARRANTY, neither express nor implied.
+ * For the details, please see: http://www.gnu.org/licenses/gpl.html
 */
 
 /* Headers */

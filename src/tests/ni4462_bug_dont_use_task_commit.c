@@ -1,5 +1,8 @@
-/* Copyright 2011-2012 Richard Neill <ni4462 at richardneill dot org>. This is Free Software, Licensed under the GNU GPL v3+, with an exception for linking against libdaqmx. */
-
+/* Copyright (C) Richard Neill 2011-2013, <ni4462 at REMOVE.ME.richardneill.org>. This program is Free Software, You can
+ * redistribute and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.  An exception is granted to link against 
+ * the National Instruments proprietary libraries, such as libnidaqmx. There is NO WARRANTY, neither express nor implied.
+ * For the details, please see: http://www.gnu.org/licenses/gpl.html */
 
 /* This illustrates why to NEVER use taskCommit before looping around  {StartTask, DAQmxReadAnalogF64, StopTask}.
    In the code below, this causes AnalogReadF64 to fail probabilistically, in one of two different ways.
