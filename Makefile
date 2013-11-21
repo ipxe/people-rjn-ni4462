@@ -54,6 +54,7 @@ manpages :
 	bash man/ni4462_voltmeter.1.sh
 	bash man/ni4462_characterise.1.sh
 
+.PHONY: www		
 www:
 	rm -rf   www .www
 	mkdir -p .www/$(WWW_DIR)/$(WWW_DIR)
@@ -68,7 +69,8 @@ www:
 	@echo "Now, upload www/$(WWW_DIR)/ and link to www/$(WWW_DIR)/index.html"
 
 .PHONY: wwwpublish
-wwwpublish: www
+wwwpublish:
+	[ -d www/$(WWW_DIR) ] || make www
 	@echo "Uploading to web for publication..."
 	scp -r www/$(WWW_DIR)/  $(WWW_SERV)
 	
