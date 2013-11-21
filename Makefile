@@ -12,6 +12,7 @@ DUMMY       = -DUSE_DUMMY_LIBDAQMX -O2   #The -O2 prevents a wrong warning about
 D_LDFLAGS   = -lm
 
 WWW_DIR     = ni4462
+WWW_SERV    = www:public_html/src/
 
 all :: ni4462 manpages
 
@@ -53,7 +54,6 @@ manpages :
 	bash man/ni4462_voltmeter.1.sh
 	bash man/ni4462_characterise.1.sh
 
-.PHONY: www
 www:
 	rm -rf   www .www
 	mkdir -p .www/$(WWW_DIR)/$(WWW_DIR)
@@ -66,6 +66,11 @@ www:
 	rm -rf   www/$(WWW_DIR)/$(WWW_DIR)
 	cp       index.html README.txt doc/NOTES.txt www/$(WWW_DIR)/
 	@echo "Now, upload www/$(WWW_DIR)/ and link to www/$(WWW_DIR)/index.html"
+
+.PHONY: wwwpublish
+wwwpublish: www
+	@echo "Uploading to web for publication..."
+	scp -r www/$(WWW_DIR)/  $(WWW_SERV)
 	
 clean :
 	rm -f src/ni4462_test 
