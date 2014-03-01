@@ -72,7 +72,7 @@ data; then after a trigger, it just keeps the next N samples.
 inputs (one sample per pixel, moving the the next pixel between samples), and it also assumes (mathematically speaking) that we know nothing about the phase of the sample clock wrt the signal. In our case, we are trying to read the amplitude of a sawtooth
 wave and we know <i>exactly</i> what the phase relationship is, but the Sigma-Delta ADC cannot take advantage of this, so the information is discarded.
 </ul>
-<p>In summary, we really need the NI4462 to be built on a 24-bit version of the <a href="http://www.analog.com/en/analog-to-digital-converters/ad-converters/ad7677/products/product.html">AD7677</a>!</p>
+<p>In summary, we really need the NI4462 to be built on a 24-bit version of the <a href="http://www.analog.com/en/analog-to-digital-converters/ad-converters/ad7677/products/product.html">AD7677</a>, or <a href="http://www.linear.com/product/LTC2378-20">LTC2378-20</a>!</p>
 		
 
 <h2>Installation</h2>
