@@ -816,7 +816,8 @@ int main(int argc, char* argv[]){
 
 
 	/* Write out header to file (use the readback values where they might differ from the requested ones). */
-	outprintf ("#Data from %s:\n", DEV_NAME);
+	outprintf ("#Data from %s (%s):\n", DEV_NAME, DEV_DEV);
+	outprintf ("#timestamp: %ld\n", then.tv_sec); 
 	outprintf ("#freq_hz:  %.3f\n", readback_hz);	outprintf ("#samples:  %s\n", samplenum_arg); 	outprintf ("#pretrigger_samples: %d\n", (unsigned int)pretrigger_samples);
 	outprintf ("#channel:  %s\n", channel_arg);	outprintf ("#voltage:  %.3f\n", readback_v2);	outprintf ("#gain:     %.1f\n", readback_g);
 	outprintf ("#coupling: %s\n", coupling_arg); 	outprintf ("#terminal: %s\n", terminal_arg);	outprintf ("#trigger:  %s\n", triggering_arg);
