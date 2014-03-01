@@ -64,6 +64,8 @@ GOTCHAS
   (The ability to do this, for small sample groups is now irrelevant anyway in the context of the hideous jitter.)
 
 * So, the operating mode is really one task (with just one trigger) per experiment; triggering like an oscilloscope is impossible.
+
+* Every few hundred experiments, the 4462 can sometimes just "get stuck". dmesg shows lots of errors. ni4462_reset doesn't clear it; the best cure is a reboot.
   
 * Moving the device between PCI slots can mess up enumeration: it can become Dev2 rather than Dev1 (even when there is only one NI4462 card present)
 
@@ -137,6 +139,8 @@ SELECTED ERROR MESSAGES
 -89137 : Connection between terminal and signal cannot be established, because one is already in use. Reset device to fix.
 
 -88705 : The specified device is not present or is not active in the system. (Usually means the enumeration has gone wrong, see nilsdev)
+
+Device Hangs: sometimes it can just get stuck. If a reset doesn't do it, the kernel driver is unhappy; reboot the host.
 
 
 TRIGGERING AND SYNCHRONISING
